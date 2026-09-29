@@ -2,9 +2,7 @@
 import trio
 import unittest
 import contextlib
-import functools
 import sys
-import types
 import warnings
 from rsyscall import local_process, Process
 
@@ -67,43 +65,47 @@ class TrioTestCase(unittest.TestCase):
     def tearDownClass(cls) -> None:
         trio.run(cls.asyncTearDownClass)
 
-    def __init__(self, methodName='runTest') -> None:
-        test = getattr(type(self), methodName)
-        @functools.wraps(test)
+    def _callTestMethod(self, method) -> None:
+        """Run the async test method under trio, bracketed by asyncSetUp/asyncTearDown
+
+        This is the hook `unittest.TestCase.run` uses to invoke the test method; the
+        stdlib's IsolatedAsyncioTestCase overrides it the same way. Doing the work here
+        rather than wrapping the method in __init__ keeps us independent of how the
+        TestCase was instantiated: both unittest and pytest construct instances with the
+        default 'runTest' name purely for introspection.
+
+        """
         async def test_with_setup() -> None:
             async with trio.open_nursery() as nursery:
                 self.nursery = nursery
                 await self.asyncSetUp()
                 try:
-                    await test(self)
+                    await method()
                 finally:
                     await self.asyncTearDown()
                 nursery.cancel_scope.cancel()
-        @functools.wraps(test_with_setup)
-        def sync_test_with_setup(self) -> None:
-            # Throw an exception if there were any "coroutine was never awaited" warnings, to fail the test.
-            # See https://github.com/python-trio/pytest-trio/issues/86
-            # We also need raise_unraisables, otherwise the exception is suppressed, since it's in __del__
-            with raise_unraisables():
-                # Restore the old warning filter after the test.
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('error', message='.*was never awaited', category=RuntimeWarning)
-                    try:
-                        trio.run(test_with_setup)
-                    except BaseExceptionGroup as eg:
-                        # trio >= 0.25 nurseries wrap even a single exception in an
-                        # ExceptionGroup; unwrap it so tests see the original exception type.
-                        exn = _unwrap_single(eg)
-                        if exn is eg:
-                            raise
-                        raise exn from None
-        setattr(self, methodName, types.MethodType(sync_test_with_setup, self))
-        super().__init__(methodName)
+        # Throw an exception if there were any "coroutine was never awaited" warnings, to fail the test.
+        # See https://github.com/python-trio/pytest-trio/issues/86
+        # We also need raise_unraisables, otherwise the exception is suppressed, since it's in __del__
+        with raise_unraisables():
+            # Restore the old warning filter after the test.
+            with warnings.catch_warnings():
+                warnings.filterwarnings('error', message='.*was never awaited', category=RuntimeWarning)
+                try:
+                    trio.run(test_with_setup)
+                except BaseExceptionGroup as eg:
+                    # trio >= 0.25 nurseries wrap even a single exception in an
+                    # ExceptionGroup; unwrap it so tests see the original exception type.
+                    exn = _unwrap_single(eg)
+                    if exn is eg:
+                        raise
+                    raise exn from None
 
 class Test(unittest.TestCase):
     def test_coro_warning(self) -> None:
         class Test(TrioTestCase):
             async def test(self):
                 trio.sleep(0)
-        with self.assertRaises(RuntimeWarning):
-            Test('test').test()
+        result = Test('test').run()
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn('RuntimeWarning', result.errors[0][1])
