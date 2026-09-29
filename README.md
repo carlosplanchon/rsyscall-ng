@@ -62,7 +62,10 @@ RSYSCALL_TEST_OPTIONAL=1 make test        # also collect the Nix/ssh/device-depe
 Modules that need a Nix store, `sshd`, `/dev/fuse`, `/dev/net/tun` or the
 upstream `nixdeps` build hook are skipped unless `RSYSCALL_TEST_OPTIONAL=1` is
 set. The baseline records the status of every collected test; it is a
-description of reality, not a promise that everything passes.
+description of reality, not a promise that everything passes. `make baseline`
+runs every test in its own interpreter: the tests share the module-level
+`rsyscall.local_process`, whose state does not survive a test being killed by
+the timeout, so in a single process one hanging test would poison the rest.
 
 ## Licensing
 

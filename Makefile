@@ -21,7 +21,7 @@ hello:
 	source scripts/env.sh && "$$PY" scripts/hello.py
 
 baseline:
-	scripts/run-baseline.sh
+	source scripts/env.sh && "$$PY" scripts/baseline.py $(PYTEST_ARGS)
 
 test:
 	source scripts/env.sh && "$$PY" -m pytest $(PYTEST_ARGS)
