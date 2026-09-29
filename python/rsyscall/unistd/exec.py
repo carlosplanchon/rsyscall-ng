@@ -1,5 +1,4 @@
 import typing as t
-import trio
 
 #### Raw syscalls ####
 import rsyscall.near.types as near
@@ -8,32 +7,25 @@ from rsyscall.sys.syscall import SYS
 
 async def _execve(sysif: SyscallInterface,
                   path: near.Address, argv: near.Address, envp: near.Address) -> None:
-    def handle(exn):
-        if isinstance(exn, SyscallHangup):
-            return None
-        else:
-            return exn
-    with trio.MultiError.catch(handle):
+    try:
         await sysif.syscall(SYS.execve, path, argv, envp)
+    except SyscallHangup:
+        # the syscall connection hanging up is the expected result of a successful exec
+        pass
 
 async def _execveat(sysif: SyscallInterface,
                     dirfd: t.Optional[near.FileDescriptor], path: near.Address,
                     argv: near.Address, envp: near.Address, flags: int) -> None:
     if dirfd is None:
         dirfd = AT.FDCWD # type: ignore
-    def handle(exn):
-        if isinstance(exn, SyscallHangup):
-            return None
-        else:
-            return exn
-    with trio.MultiError.catch(handle):
+    try:
         await sysif.syscall(SYS.execveat, dirfd, path, argv, envp, flags)
+    except SyscallHangup:
+        pass
 
 async def _exit(sysif: SyscallInterface, status: int) -> None:
-    def handle(exn):
-        if isinstance(exn, SyscallHangup):
-            return None
-        else:
-            return exn
-    with trio.MultiError.catch(handle):
+    try:
         await sysif.syscall(SYS.exit, status)
+    except SyscallHangup:
+        # likewise, the connection hangs up when the process exits
+        pass
