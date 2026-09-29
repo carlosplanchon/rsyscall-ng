@@ -96,8 +96,9 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
 
 - `python/rsyscall/unistd/exec.py:19-20` uses `AT.FDCWD` without importing `AT`; the branch is
   unreachable in the test-suite.
-- `pyroute2` is imported (`python/rsyscall/linux/rtnetlink.py:2`) but not declared in
-  `install_requires` (`python/setup.py:18`); only the optional `test_net.py` notices.
+- `pyroute2` is imported (`python/rsyscall/linux/rtnetlink.py:2`) but was not declared as a
+  dependency by the upstream `setup.py`; only the optional `test_net.py` notices. Since the
+  packaging step the repository's `pyproject.toml` declares it as the optional extra `net`.
 
 ## Oracle gaps
 

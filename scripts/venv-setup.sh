@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Create the backend's venv ($VENV) and install python/ in editable mode, building the cffi
-# extension rsyscall._raw against the backend's prefix ($PREFIX); see scripts/env.sh.
+# Create the backend's venv ($VENV) and install the project in editable mode, building the cffi
+# extension rsyscall._raw against the backend's prefix ($PREFIX, RSYSCALL_NATIVE=prefix); see scripts/env.sh.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
@@ -12,7 +12,7 @@ fi
 
 # Bake a RUNPATH into rsyscall/_raw*.so so `import rsyscall` works without LD_LIBRARY_PATH.
 export LDFLAGS="-Wl,-rpath,$PREFIX/lib${LDFLAGS:+ $LDFLAGS}"
-uv pip install --python "$PY" --reinstall-package rsyscall -e "$ROOT/python"
+uv pip install --python "$PY" --reinstall-package rsyscall-ng -e "$ROOT"
 uv pip install --python "$PY" pytest pytest-timeout
 
 "$PY" -c 'import rsyscall, rsyscall._raw; print("rsyscall imported from", rsyscall.__file__)'

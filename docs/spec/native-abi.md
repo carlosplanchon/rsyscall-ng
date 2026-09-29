@@ -28,12 +28,15 @@ images are two's complement (`python/rsyscall/tasks/connection.py:35-38`,
 ## 2. Build contract
 
 The extension module `rsyscall._raw` is built by `python/ffibuilder.py` through
-`setuptools` (`python/setup.py:16`, `python/pyproject.toml:1-3`) with
-`set_source_pkgconfig("rsyscall._raw", ["rsyscall"], <preamble>)` (`python/ffibuilder.py:7-8`).
-The native side MUST therefore install a pkg-config module named `rsyscall` whose `Cflags` let
-`#include <rsyscall.h>` resolve and whose `Libs` link a library that defines the five symbols of §3
-(`python/ffibuilder.py:7-8`, `python/ffibuilder.py:26`, `python/ffibuilder.py:137`,
-`python/ffibuilder.py:1235-1239`). (Source for the semantics of `set_source_pkgconfig`: the cffi
+`setuptools` (the repository's `setup.py` and `pyproject.toml`, PEP 517). In prefix mode the
+build calls `set_source_pkgconfig("rsyscall._raw", ["rsyscall"], <preamble>)`; in bundled mode
+(wheels) an equivalent `set_source` names the same library `rsyscall`, the header directory of
+`native/` and the same preamble (`python/ffibuilder.py:3-8`). The native side MUST therefore
+provide a library `librsyscall.so` that defines the five symbols of §3 and a header
+`<rsyscall.h>`, reachable either through a pkg-config module named `rsyscall` (prefix mode:
+`Cflags` let `#include <rsyscall.h>` resolve, `Libs` link the library) or through the explicit
+include and library directories of bundled mode (`python/ffibuilder.py:3-8`,
+`python/ffibuilder.py:26`, `python/ffibuilder.py:137`, `python/ffibuilder.py:1235-1239`). (Source for the semantics of `set_source_pkgconfig`: the cffi
 documentation via Context7, `cdef.rst`: it calls `pkg-config` for the listed packages and merges
 the flags into `set_source`.)
 

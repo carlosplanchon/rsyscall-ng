@@ -1,11 +1,11 @@
 from cffi import FFI
-import os
-import pathlib
-import shutil
-
+import os, pathlib, shutil
+def _set_source(ffibuilder, preamble, _root=pathlib.Path(__file__).resolve().parent.parent):
+    "RSYSCALL_NATIVE=prefix links through pkg-config (make venv BACKEND=...); the default, bundled, links the crate in native/ and rpaths $ORIGIN/_native (wheels; see setup.py). Eight lines on purpose: docs/spec cites line numbers of this file"
+    if os.environ.get("RSYSCALL_NATIVE", "bundled") == "prefix": return ffibuilder.set_source_pkgconfig("rsyscall._raw", ["rsyscall"], preamble)
+    return ffibuilder.set_source("rsyscall._raw", preamble, include_dirs=[str(_root / "native" / "rsyscall" / "include")], library_dirs=[str(_root / "native" / "target" / "release")], libraries=["rsyscall"], extra_link_args=["-Wl,-rpath,$ORIGIN/_native"])
 ffibuilder = FFI()
-ffibuilder.set_source_pkgconfig(
-    "rsyscall._raw", ["rsyscall"], """
+_set_source(ffibuilder, """
 #include <asm/types.h>
 #include <dirent.h>
 #include <fcntl.h>

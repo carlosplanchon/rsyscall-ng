@@ -23,3 +23,12 @@ __pycache__/
 /native/prefix/
 /native/target/
 /.venv-rust/
+
+# packaging: wheels, PEP 517 build tree, metadata, the wheel test venv, and the native
+# artefacts that setup.py copies into the package in bundled mode
+/dist/
+/build/
+*.egg-info/
+/.venv-wheel/
+/python/rsyscall/_native/librsyscall.so
+/python/rsyscall/_native/rsyscall-*

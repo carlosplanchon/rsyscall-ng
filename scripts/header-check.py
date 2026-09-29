@@ -36,9 +36,12 @@ PROTOTYPES = [  # native-abi.md §3 / python/ffibuilder.py L137, L1235-1239
 def preamble() -> str:
     "The C source string passed to set_source_pkgconfig in python/ffibuilder.py"
     for node in ast.walk(ast.parse(FFIBUILDER.read_text())):
-        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "set_source_pkgconfig":
-            return node.args[2].value
-    sys.exit("header-check: set_source_pkgconfig call not found in python/ffibuilder.py")
+        if isinstance(node, ast.Call):
+            if getattr(node.func, "id", None) == "_set_source":          # _set_source(ffibuilder, preamble)
+                return node.args[1].value
+            if getattr(node.func, "attr", None) == "set_source_pkgconfig":  # the upstream form
+                return node.args[2].value
+    sys.exit("header-check: no _set_source/set_source_pkgconfig call found in python/ffibuilder.py")
 
 def layouts() -> dict[str, tuple[int, list[tuple[str, int]]]]:
     "struct name -> (sizeof, [(field, offset), ...]) from the generated layout tables"

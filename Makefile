@@ -1,7 +1,7 @@
 SHELL := bash
 BACKEND ?= c
 export BACKEND
-.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check clean-venv clean-reference clean-native
+.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-test clean-venv clean-reference clean-native clean-dist
 
 help:
 	@echo "targets (BACKEND=c|rust selects the native implementation; default c):"
@@ -17,9 +17,12 @@ help:
 	@echo "  probe            run the black-box probes against the backend's helper executables"
 	@echo "  probe-diff       run the probes against both backends and diff the normalised output"
 	@echo "  spec-check       verify docs/spec: generated layouts and vectors are current, citations valid"
+	@echo "  wheel            build the wheel (bundles the Rust native side) into dist/"
+	@echo "  wheel-test       install the wheel into a throwaway venv and exercise it away from the source tree"
 	@echo "  clean-venv       remove both venvs and in-tree build artifacts"
 	@echo "  clean-reference  remove reference/ (oracle clone and build)"
 	@echo "  clean-native     remove native/prefix and native/target"
+	@echo "  clean-dist       remove dist/, build/ and the bundled artefacts copied into python/rsyscall/_native/"
 
 oracle:
 	scripts/oracle-build.sh
@@ -65,5 +68,14 @@ clean-venv:
 clean-reference:
 	rm -rf reference
 
+wheel:
+	rm -rf dist build && uv build --wheel --out-dir dist .
+
+wheel-test:
+	scripts/wheel-test.sh
+
 clean-native:
 	rm -rf native/prefix native/target
+
+clean-dist:
+	rm -rf dist build python/rsyscall/_native/librsyscall.so python/rsyscall/_native/rsyscall-* *.egg-info python/*.egg-info

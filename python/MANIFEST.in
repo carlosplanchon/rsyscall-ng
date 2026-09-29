@@ -1,2 +1,0 @@
-include ffibuilder.py
-include rsyscall/tasks/ssh_bootstrap.sh

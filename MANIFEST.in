@@ -1,0 +1,14 @@
+include LICENSE NOTICE README.md pytest.ini Makefile
+include python/ffibuilder.py python/setup.cfg
+include python/rsyscall/tasks/ssh_bootstrap.sh
+include native/Cargo.toml native/Cargo.lock native/README.md
+recursive-include native/core *
+recursive-include native/rsyscall *
+recursive-include docs/spec *
+recursive-include scripts *
+recursive-include tests *
+prune native/target
+prune native/prefix
+prune reference
+exclude python/rsyscall/_raw*.so python/rsyscall/_raw*.c
+global-exclude __pycache__ *.py[cod]

@@ -20,6 +20,10 @@ case "$BACKEND" in
 esac
 PY="$VENV/bin/python"
 export RSYSCALL_BACKEND="$BACKEND"
+# The development flow builds the cffi extension against the prefix (setup.py, prefix mode)
+# and finds the helper executables there (python/rsyscall/_native).
+export RSYSCALL_NATIVE=prefix
+export RSYSCALL_LIBEXEC_DIR="$PREFIX/libexec/rsyscall"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 # Searched before the RUNPATH baked into the cffi module, so this decides which librsyscall is loaded.
 export LD_LIBRARY_PATH="$PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
