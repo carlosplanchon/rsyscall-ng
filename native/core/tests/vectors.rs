@@ -5,6 +5,8 @@
 
 use core::mem::{align_of, offset_of, size_of};
 use rsyscall_core::sys::{Cmsghdr, FutexNode, Iovec, Msghdr, RobustList, SockaddrUn};
+use rsyscall_core::cmsg::{cmsg_align, cmsg_space, parse_control, CONTROL_LEN, MAX_FDS};
+use rsyscall_core::persistent::{decode_count, encode_reply};
 use rsyscall_core::wire::{encode_response, Request, TrampolineStack, REQUEST_LEN, RESPONSE_LEN};
 use serde::Deserialize;
 
@@ -143,4 +145,83 @@ fn image_layouts_match_vectors() {
     cmsg.cmsg_type = 1;
     let scm = hex_of(&vf, "scm_rights_2fds");
     assert_eq!(struct_bytes(&cmsg), &scm[..16]);
+}
+
+/// The control-data parser on the sender's unpadded images (vectors) and on the
+/// kernel's CMSG_ALIGN-padded re-encoding of the same messages.
+#[test]
+fn scm_rights_control_parses() {
+    let vf = load();
+    let check = |name: &str, expect: &[i32]| {
+        let bytes = hex_of(&vf, name);
+        // the client's image: msg_controllen == cmsg_len == 16 + 4n, no padding.
+        assert_eq!(bytes.len(), 16 + 4 * expect.len(), "{name} length");
+        let mut out = [0i32; MAX_FDS];
+        let p = parse_control(&bytes, &mut out);
+        assert!(!p.malformed, "{name} malformed");
+        assert_eq!((p.ncmsgs, p.nrights, p.nfds), (1, 1, expect.len()), "{name} counts");
+        assert_eq!(&out[..p.nfds], expect, "{name} fds");
+        // what the receiver sees: payload padded to CMSG_SPACE(4n).
+        let mut padded = bytes.clone();
+        padded.resize(cmsg_space(expect.len()), 0);
+        let mut out2 = [0i32; MAX_FDS];
+        let p2 = parse_control(&padded, &mut out2);
+        assert_eq!(p2, p, "{name} padded parse");
+        assert_eq!(&out2[..p2.nfds], expect, "{name} padded fds");
+    };
+    check("scm_rights_2fds", &[5, 6]);
+    check("scm_rights_3fds", &[5, 6, 7]);
+    check("scm_rights_4fds", &[5, 6, 7, 8]);
+
+    // Receiver sizing: the observed msg_controllen was 32 for both 3 and 4 fds.
+    assert_eq!(cmsg_space(3), 32);
+    assert_eq!(cmsg_space(4), 32);
+    assert_eq!(cmsg_align(28), 32);
+    assert_eq!(CONTROL_LEN, 80);
+}
+
+#[test]
+fn scm_rights_rejects_malformed() {
+    let vf = load();
+    let good = hex_of(&vf, "scm_rights_2fds");
+    let mut out = [0i32; MAX_FDS];
+
+    // not even a header: no message at all.
+    let p = parse_control(&good[..12], &mut out);
+    assert_eq!((p.ncmsgs, p.nfds, p.malformed), (0, 0, false));
+
+    // cmsg_len beyond the buffer.
+    let mut big = good.clone();
+    big[0] = 200;
+    assert!(parse_control(&big, &mut out).malformed);
+
+    // cmsg_len smaller than a header.
+    let mut small = good.clone();
+    small[0] = 8;
+    assert!(parse_control(&small, &mut out).malformed);
+
+    // a non-SCM_RIGHTS message is counted but yields no fds.
+    let mut wrong = good.clone();
+    wrong[12] = 2;
+    let p = parse_control(&wrong, &mut out);
+    assert_eq!((p.ncmsgs, p.nrights, p.nfds, p.malformed), (1, 0, 0, false));
+
+    // two messages back to back: both counted (the receiver requires exactly one).
+    let mut two = good.clone();
+    two.resize(cmsg_space(2), 0);
+    two.extend_from_slice(&good);
+    let p = parse_control(&two, &mut out);
+    assert_eq!((p.ncmsgs, p.nrights, p.nfds, p.malformed), (2, 2, 4, false));
+    assert_eq!(&out[..4], &[5, 6, 5, 6]);
+}
+
+#[test]
+fn persistent_handshake_vectors() {
+    let vf = load();
+    let count: [u8; 4] = hex_of(&vf, "persistent_count").try_into().unwrap();
+    assert_eq!(decode_count(&count), 2);
+
+    let mut reply = [0u8; 4 * MAX_FDS];
+    let n = encode_reply(&[5, 6], &mut reply);
+    assert_eq!(&reply[..n], &hex_of(&vf, "persistent_reply")[..]);
 }

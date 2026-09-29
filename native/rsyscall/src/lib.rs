@@ -27,10 +27,12 @@ pub extern "C" fn rsyscall_server(infd: i32, outfd: i32) -> i32 {
 }
 
 /// `int rsyscall_persistent_server(int infd, int outfd, int listensock)`
-/// (native-abi.md §3.3). M1 stub: serve the current connection, then terminate the
-/// process with a non-zero status. The real reconnection loop is M3.
+/// (native-abi.md §3.3; bootstrap-handshakes.md §5). Serves, reconnects and serves
+/// again forever; `serve_persistent` only returns when `accept` on `listensock`
+/// fails, which is Unspecified in v0 (Recommended default: terminate with a
+/// non-zero status). It never returns to the trampoline with a success status.
 #[unsafe(no_mangle)]
 pub extern "C" fn rsyscall_persistent_server(infd: i32, outfd: i32, listensock: i32) -> i32 {
-    rsyscall_core::persistent::serve_persistent(infd, outfd, listensock);
+    let _ = rsyscall_core::persistent::serve_persistent(infd, outfd, listensock);
     rsyscall_core::sys::exit_group(1)
 }

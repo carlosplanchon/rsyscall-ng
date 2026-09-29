@@ -12,5 +12,6 @@ A drop-in replacement for the upstream C native side, implemented in Rust from
   template.
 
 Status: M1 (server loop, the three assembly exports, header, minimal binaries and
-tests). M2–M5 (baseline parity, persistent server, full bootstrap executables,
-docs) follow.
+tests), M2 (parity with the C baseline) and M3 (persistent server: disconnect,
+accept, SCM_RIGHTS reconnection handshake) done. M4 (the three helper
+executables) and M5 (docs) follow.
