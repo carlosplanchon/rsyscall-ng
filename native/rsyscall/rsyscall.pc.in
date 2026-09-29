@@ -1,0 +1,10 @@
+prefix=@PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: rsyscall
+Description: rsyscall native side (Rust, clean-room from docs/spec)
+Version: 0.1.0
+Libs: -L${libdir} -lrsyscall
+Cflags: -I${includedir}

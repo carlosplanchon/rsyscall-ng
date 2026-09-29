@@ -1,0 +1,20 @@
+[workspace]
+members = ["core", "rsyscall"]
+resolver = "3"
+
+# Final artefacts (native-abi.md §9): freestanding, no unwinding, keep .symtab for
+# objdump/nm on our own output (strip only debuginfo).
+[profile.release]
+opt-level = 2
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+debug = false
+strip = "debuginfo"
+
+# `cargo test` forces panic=unwind for the test harness regardless of this setting
+# (Cargo reference: "Tests ... ignore the panic setting"), so the core tests still build.
+[profile.dev]
+panic = "abort"
+overflow-checks = false

@@ -1,0 +1,17 @@
+[package]
+name = "rsyscall-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib"]
+
+# Dev-only: the vectors test parses docs/spec/vectors/v0.json; the consts test
+# cross-checks the hand-written constants against the kernel UAPI headers.
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# `no_std` provides the crate's own `ctypes` module (required once default features,
+# which would pull in `std`, are off); the other features gate the constant modules.
+linux-raw-sys = { version = "0.12", default-features = false, features = ["no_std", "general", "net", "errno", "prctl"] }
