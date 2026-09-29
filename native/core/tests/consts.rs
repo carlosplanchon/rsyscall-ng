@@ -54,4 +54,18 @@ fn flags_and_errnos_match_linux_raw_sys() {
     same!(c::EPIPE, e::EPIPE);
     same!(c::ENOTSOCK, e::ENOTSOCK);
     same!(c::ECONNABORTED, e::ECONNABORTED);
+    same!(c::EPERM, e::EPERM);
+    same!(c::ENOENT, e::ENOENT);
+    same!(c::EBADF, e::EBADF);
+    same!(c::EACCES, e::EACCES);
+    same!(c::EEXIST, e::EEXIST);
+    same!(c::ENOTDIR, e::ENOTDIR);
+    same!(c::EINVAL, e::EINVAL);
+    same!(c::EMFILE, e::EMFILE);
+    same!(c::ENAMETOOLONG, e::ENAMETOOLONG);
+    same!(c::EADDRINUSE, e::EADDRINUSE);
+    same!(c::ECONNREFUSED, e::ECONNREFUSED);
+
+    // AT_FDCWD is negative: compare in the kernel's `int` width.
+    assert_eq!(c::AT_FDCWD as i32, g::AT_FDCWD as i32);
 }

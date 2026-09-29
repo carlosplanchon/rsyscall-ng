@@ -9,7 +9,9 @@ OUT="$ROOT/reference/probe-compare"
 mkdir -p "$OUT"
 norm() {
     sed -E 's/0x[0-9a-f]+/0xX/g; s/\bpid=[0-9]+/pid=N/g; s/popen pid [0-9]+/popen pid N/g; s/\bpid [0-9]+\b/pid N/g;
-            s#/tmp/[A-Za-z0-9_./-]+#/tmp/T#g; s/(socket|pipe|anon_inode):\[[0-9]+\]/\1:[I]/g'
+            s/getpid -> [0-9]+/getpid -> N/g; s/getpid,close\(-1\) -> \([0-9]+,/getpid,close(-1) -> (N,/g;
+            s#/tmp/[A-Za-z0-9_./-]+#/tmp/T#g; s#[A-Za-z0-9_./-]*/(reference|native)/prefix/#<prefix>/#g;
+            s/(socket|pipe|anon_inode):\[[0-9]+\]/\1:[I]/g'
 }
 status=0
 for m in stdin stub stublong bootstrap; do

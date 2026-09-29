@@ -117,7 +117,7 @@ fn handshake(conn: i32) -> Result<i32, ()> {
     let mut fds = [0i32; MAX_FDS];
     let nfds = match cmsg::recv_fds(conn, &mut fds) {
         Ok(n) => n,
-        Err(()) => {
+        Err(_) => {
             let _ = sys::close(conn);
             return Err(());
         }

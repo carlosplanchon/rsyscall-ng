@@ -126,6 +126,19 @@ pub fn parse_control(control: &[u8], out: &mut [i32; MAX_FDS]) -> Parsed {
     p
 }
 
+/// Why [`recv_fds`] could not deliver a valid fd message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecvFdsError {
+    /// `recvmsg` failed; the positive errno (e.g. `ENOTSOCK` when fd 0 is not a
+    /// socket, bootstrap-handshakes.md §6).
+    Errno(i64),
+    /// `recvmsg` returned 0: the peer closed without sending a message.
+    Eof,
+    /// The message was truncated (`MSG_CTRUNC`), carried anything but exactly one
+    /// `SOL_SOCKET`/`SCM_RIGHTS` control message, or was malformed.
+    Malformed,
+}
+
 /// Receive exactly one SCM_RIGHTS message on `fd` (bootstrap-handshakes.md §0):
 /// a 1-byte iovec (consumed, value ignored) and a `CMSG_SPACE(4 * MAX_FDS)`
 /// control buffer, with `MSG_CMSG_CLOEXEC`. Returns the number of fds written to
@@ -135,7 +148,7 @@ pub fn parse_control(control: &[u8], out: &mut [i32; MAX_FDS]) -> Parsed {
 /// failed validation (`MSG_CTRUNC`, not exactly one cmsg, not `SCM_RIGHTS`,
 /// malformed) are closed here. A negative `recvmsg` result or EOF installs
 /// nothing.
-pub fn recv_fds(fd: i32, out: &mut [i32; MAX_FDS]) -> Result<usize, ()> {
+pub fn recv_fds(fd: i32, out: &mut [i32; MAX_FDS]) -> Result<usize, RecvFdsError> {
     let mut payload = [0u8; 1];
     let mut iov = Iovec { iov_base: payload.as_mut_ptr() as *mut c_void, iov_len: 1 };
     let mut ctrl = ControlBuf::new();
@@ -155,8 +168,11 @@ pub fn recv_fds(fd: i32, out: &mut [i32; MAX_FDS]) -> Result<usize, ()> {
             break r;
         }
     };
-    if r <= 0 {
-        return Err(());
+    if r < 0 {
+        return Err(RecvFdsError::Errno(-r));
+    }
+    if r == 0 {
+        return Err(RecvFdsError::Eof);
     }
 
     let ctrunc = (msg.msg_flags as i64) & MSG_CTRUNC != 0;
@@ -169,7 +185,60 @@ pub fn recv_fds(fd: i32, out: &mut [i32; MAX_FDS]) -> Result<usize, ()> {
             let _ = sys::close(out[i]);
             i += 1;
         }
-        return Err(());
+        return Err(RecvFdsError::Malformed);
     }
     Ok(p.nfds)
+}
+
+/// Send `fds` on `fd` as one message with a single 1-byte payload (0) and one
+/// `SOL_SOCKET`/`SCM_RIGHTS` control message, `cmsg_len == msg_controllen ==
+/// 16 + 4n` exactly like the client's own encoding (bootstrap-handshakes.md §0;
+/// vectors `scm_rights_*`). Used by the ssh bootstrap's hand-off (§2). Returns the
+/// raw `sendmsg` result (1 on success, `-errno` on failure); at most `MAX_FDS`
+/// fds are sent. `MSG_NOSIGNAL` keeps a dead peer from raising `SIGPIPE`.
+pub fn send_fds(fd: i32, fds: &[i32]) -> i64 {
+    let n = if fds.len() > MAX_FDS { MAX_FDS } else { fds.len() };
+    let mut payload = [0u8; 1];
+    let mut iov = Iovec { iov_base: payload.as_mut_ptr() as *mut c_void, iov_len: 1 };
+    let mut ctrl = ControlBuf::new();
+    let clen = cmsg_len(n);
+    let len_bytes = (clen as u64).to_le_bytes();
+    let level = (SOL_SOCKET as i32).to_le_bytes();
+    let ty = (SCM_RIGHTS as i32).to_le_bytes();
+    let mut i = 0;
+    while i < 8 {
+        ctrl.0[i] = len_bytes[i];
+        i += 1;
+    }
+    let mut i = 0;
+    while i < 4 {
+        ctrl.0[8 + i] = level[i];
+        ctrl.0[12 + i] = ty[i];
+        i += 1;
+    }
+    let mut k = 0;
+    while k < n {
+        let b = fds[k].to_le_bytes();
+        let off = CMSG_HDR_LEN + 4 * k;
+        ctrl.0[off] = b[0];
+        ctrl.0[off + 1] = b[1];
+        ctrl.0[off + 2] = b[2];
+        ctrl.0[off + 3] = b[3];
+        k += 1;
+    }
+    let msg = Msghdr {
+        msg_name: core::ptr::null_mut(),
+        msg_namelen: 0,
+        msg_iov: &mut iov as *mut Iovec,
+        msg_iovlen: 1,
+        msg_control: ctrl.0.as_mut_ptr() as *mut c_void,
+        msg_controllen: clen,
+        msg_flags: 0,
+    };
+    loop {
+        let r = sys::sendmsg(fd, &msg as *const Msghdr, MSG_NOSIGNAL);
+        if r != -EINTR {
+            return r;
+        }
+    }
 }

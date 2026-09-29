@@ -182,6 +182,28 @@ pub struct SockaddrUn {
     pub sun_path: [u8; 108],
 }
 
+impl SockaddrUn {
+    /// Longest path that fits with its NUL terminator (bootstrap-handshakes.md §4:
+    /// "Paths of up to 107 bytes MUST work").
+    pub const MAX_PATH: usize = 107;
+
+    /// Build an `AF_UNIX` address for `path`, returning it with the `addrlen` to
+    /// pass to `bind`/`connect` (family + path + NUL). `None` if the path is longer
+    /// than [`Self::MAX_PATH`].
+    pub fn from_path(path: &[u8]) -> Option<(SockaddrUn, usize)> {
+        if path.len() > Self::MAX_PATH {
+            return None;
+        }
+        let mut a = SockaddrUn { sun_family: AF_UNIX as u16, sun_path: [0u8; 108] };
+        let mut i = 0;
+        while i < path.len() {
+            a.sun_path[i] = path[i];
+            i += 1;
+        }
+        Some((a, 2 + path.len() + 1))
+    }
+}
+
 /// `struct robust_list` — sizeof 8, align 8.
 #[repr(C)]
 pub struct RobustList {

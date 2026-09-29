@@ -78,4 +78,20 @@ core::arch::global_asm!(
     ".p2align 4",
     "bcmp:",
     "jmp memcmp",
+
+    // size_t strlen(const char *s) -- LLVM's loop-idiom recognition turns a
+    // hand-written NUL scan (rsyscall_core::cstr::strlen) into a call to this
+    // symbol, so the freestanding artefacts must define it.
+    ".weak strlen",
+    ".p2align 4",
+    "strlen:",
+    "mov rax, rdi",
+    "7:",
+    "cmp byte ptr [rax], 0",
+    "je 8f",
+    "inc rax",
+    "jmp 7b",
+    "8:",
+    "sub rax, rdi",
+    "ret",
 );

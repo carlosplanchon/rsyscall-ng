@@ -6,6 +6,7 @@
 use core::mem::{align_of, offset_of, size_of};
 use rsyscall_core::sys::{Cmsghdr, FutexNode, Iovec, Msghdr, RobustList, SockaddrUn};
 use rsyscall_core::cmsg::{cmsg_align, cmsg_space, parse_control, CONTROL_LEN, MAX_FDS};
+use rsyscall_core::describe::{lp_len_bytes, Bootstrap, Plain, StdinBootstrap, SymbolTable, UnixStub};
 use rsyscall_core::persistent::{decode_count, encode_reply};
 use rsyscall_core::wire::{encode_response, Request, TrampolineStack, REQUEST_LEN, RESPONSE_LEN};
 use serde::Deserialize;
@@ -224,4 +225,72 @@ fn persistent_handshake_vectors() {
     let mut reply = [0u8; 4 * MAX_FDS];
     let n = encode_reply(&[5, 6], &mut reply);
     assert_eq!(&reply[..n], &hex_of(&vf, "persistent_reply")[..]);
+}
+
+/// The describe structs' in-memory images against the vectors (bootstrap-handshakes.md
+/// §0, §2-§4; layouts of abi-layouts.generated.md), padding included and zero.
+#[test]
+fn describe_images_match_vectors() {
+    let vf = load();
+    let symbols = SymbolTable {
+        rsyscall_server: 0x401000,
+        rsyscall_persistent_server: 0x401100,
+        rsyscall_futex_helper: 0x401200,
+        rsyscall_trampoline: 0x401300,
+    };
+    assert_eq!(size_of::<SymbolTable>(), 32);
+    assert_eq!(offset_of!(SymbolTable, rsyscall_trampoline), 24);
+
+    let b = Bootstrap { symbols, pid: 4242, listening_sock: 4, syscall_sock: 5, data_sock: 6, envp_count: 2 };
+    assert_eq!(size_of::<Bootstrap>(), 56);
+    assert_eq!(offset_of!(Bootstrap, pid), 32);
+    assert_eq!(offset_of!(Bootstrap, envp_count), 48);
+    assert_eq!(b.as_bytes(), &hex_of(&vf, "describe_bootstrap")[..]);
+
+    let s = StdinBootstrap {
+        symbols,
+        pid: 4242,
+        syscall_fd: 3,
+        data_fd: 4,
+        futex_memfd: -1,
+        connecting_fd: 5,
+        _pad: 0,
+        envp_count: 2,
+    };
+    assert_eq!(size_of::<StdinBootstrap>(), 64);
+    assert_eq!(offset_of!(StdinBootstrap, connecting_fd), 48);
+    assert_eq!(offset_of!(StdinBootstrap, _pad), 52);
+    assert_eq!(offset_of!(StdinBootstrap, envp_count), 56);
+    assert_eq!(s.as_bytes(), &hex_of(&vf, "describe_stdin")[..]);
+
+    let u = UnixStub {
+        symbols,
+        pid: 4242,
+        syscall_fd: 5,
+        data_fd: 6,
+        futex_memfd: 7,
+        connecting_fd: 8,
+        _pad: 0,
+        argc: 2,
+        envp_count: 2,
+        sigmask: 0x200,
+    };
+    assert_eq!(size_of::<UnixStub>(), 80);
+    assert_eq!(offset_of!(UnixStub, _pad), 52);
+    assert_eq!(offset_of!(UnixStub, argc), 56);
+    assert_eq!(offset_of!(UnixStub, envp_count), 64);
+    assert_eq!(offset_of!(UnixStub, sigmask), 72);
+    assert_eq!(u.as_bytes(), &hex_of(&vf, "describe_stub")[..]);
+
+    // sigmask encoding: bit n-1 = signal n; SIGCHLD (17) is bit 16.
+    assert_eq!(&(1u64 << 16).to_le_bytes()[..], &hex_of(&vf, "sigmask_sigchld")[..]);
+}
+
+#[test]
+fn lp_string_vector() {
+    let vf = load();
+    let mut img = Vec::new();
+    img.extend_from_slice(&lp_len_bytes(9));
+    img.extend_from_slice(b"PATH=/bin");
+    assert_eq!(img, hex_of(&vf, "lp_string"));
 }

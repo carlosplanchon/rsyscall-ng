@@ -80,6 +80,26 @@ pub const EAGAIN: i64 = 11;
 pub const EPIPE: i64 = 32;
 pub const ENOTSOCK: i64 = 88;
 pub const ECONNABORTED: i64 = 103;
+// The remaining errnos only feed the helper executables' diagnostics
+// (bootstrap-handshakes.md §6: `bind: No such file or directory`, `recvmsg(sock=0):
+// Socket operation on non-socket`, `connect(<path>): ...`); x86-64 UAPI values,
+// cross-checked in tests/consts.rs.
+pub const EPERM: i64 = 1;
+pub const ENOENT: i64 = 2;
+pub const EBADF: i64 = 9;
+pub const EACCES: i64 = 13;
+pub const EEXIST: i64 = 17;
+pub const ENOTDIR: i64 = 20;
+pub const EINVAL: i64 = 22;
+pub const EMFILE: i64 = 24;
+pub const ENAMETOOLONG: i64 = 36;
+pub const EADDRINUSE: i64 = 98;
+pub const ECONNREFUSED: i64 = 111;
+
+// ---- openat -----------------------------------------------------------------
+// source: wire-protocol.md §2 (AT_FDCWD = -100; vector request_negative_arg);
+// used by the unix stub's long-path workaround (bootstrap-handshakes.md §4).
+pub const AT_FDCWD: i64 = -100;
 
 // ---- clone flags -----------------------------------------------------------
 // source: vectors/v0.json clone_args.constants; native-abi.md §5.
