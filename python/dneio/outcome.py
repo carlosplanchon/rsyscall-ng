@@ -10,5 +10,5 @@ __all__ = [
 ]
 
 T = t.TypeVar('T')
-class Outcome(t.Generic[T], outcome.Outcome):
+class Outcome(outcome.Outcome[T]):
     pass
