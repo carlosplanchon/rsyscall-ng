@@ -1,0 +1,74 @@
+# rsyscall test baseline. Format: <STATUS> <pytest nodeid> [ # <exception class>]
+# backend=c python=3.14 trio=0.34.0 pytest=9.1.1 isolation=one-process-per-test timeout=60s
+# 71 entries: PASS=67, SKIP=1, XFAIL=0, XPASS=0, FAIL=2, ERROR=1
+PASS python/rsyscall/tests/test_allocator.py::TestMisc::test_madvise
+PASS python/rsyscall/tests/test_benchmark.py::TestBenchmark::test_bench
+PASS python/rsyscall/tests/test_cat.py::TestCat::test_cat_async
+PASS python/rsyscall/tests/test_cat.py::TestCat::test_cat_pipe
+FAIL python/rsyscall/tests/test_chroot.py::TestChroot::test_basic  # OSError
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_async
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_check_in_nursery
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_exec
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_exit
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_mkdtemp
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_nest_async
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_nest_exec
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_nest_exit
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_nest_multiple
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_signal_queue
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_two_children_exec
+PASS python/rsyscall/tests/test_clone.py::TestClone::test_unshare_async
+PASS python/rsyscall/tests/test_clone.py::TestCloneUnshareFiles::test_nest_async
+PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_event
+PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_failure
+PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_parallel
+PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_through_multiple
+PASS python/rsyscall/tests/test_concurrency.py::TestConcurrency::test_nest_cancel_inside_shield
+FAIL python/rsyscall/tests/test_concurrency.py::TestConcurrency::test_nursery  # rsyscall.tests.test_concurrency.MyException
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_afd_with_handle
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_delayed_eagain
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_local
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_multi
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_process_multi
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_process_root_epoller
+PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_wrong_op_on_pipe
+PASS python/rsyscall/tests/test_eventfd.py::TestEventfd::test
+PASS python/rsyscall/tests/test_fd.py::TestFS::test_fd_gc
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_copy
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_fdat
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_getdents
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_getdents_noent
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_readlink_proc
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_readlinkat_non_symlink
+PASS python/rsyscall/tests/test_fs.py::TestFS::test_which
+PASS python/rsyscall/tests/test_inotify.py::TestInotify::test_create
+PASS python/rsyscall/tests/test_ip.py::TestIP::test_dgram_connect
+SKIP python/rsyscall/tests/test_ip.py::TestIP::test_send_is_not_atomic
+PASS python/rsyscall/tests/test_ip.py::TestIP::test_stream_listen
+PASS python/rsyscall/tests/test_ip.py::TestIP::test_write_to_unconnected
+PASS python/rsyscall/tests/test_misc.py::TestMisc::test_do_cloexec_except
+PASS python/rsyscall/tests/test_mmap.py::TestMisc::test_madvise
+PASS python/rsyscall/tests/test_pidns.py::TestPidns::test_cat
+PASS python/rsyscall/tests/test_pidns.py::TestPidns::test_sleep
+PASS python/rsyscall/tests/test_pipe.py::TestPipe::test_read_write
+PASS python/rsyscall/tests/test_pipe.py::TestPipe::test_readv_writev
+PASS python/rsyscall/tests/test_pipe.py::TestPipe::test_recv
+PASS python/rsyscall/tests/test_pointer.py::TestPointer::test_use_after_free_allocation
+PASS python/rsyscall/tests/test_pointer.py::TestPointer::test_use_after_free_ptr
+PASS python/rsyscall/tests/test_prctl.py::TestUser::test_name
+PASS python/rsyscall/tests/test_proc.py::TestProc::test_pgid
+ERROR python/rsyscall/tests/test_repl.py::TestREPL::test_repl  # RuntimeError
+PASS python/rsyscall/tests/test_resource.py::TestResource::test_rlimit
+PASS python/rsyscall/tests/test_sched.py::TestEventfd::test
+PASS python/rsyscall/tests/test_seek.py::TestSeek::test_ficlonerange
+PASS python/rsyscall/tests/test_seek.py::TestSeek::test_preadwrite
+PASS python/rsyscall/tests/test_setuid.py::TestSetuid::test_getdent_proc_pid_fd_after_setuid
+PASS python/rsyscall/tests/test_signal.py::TestSignal::test_sigaction
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_listen
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_listen_async
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_listen_async_accept
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_long_sockaddr
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_pass_fd
+PASS python/rsyscall/tests/test_socket.py::TestSocket::test_shutdown_read
+PASS python/rsyscall/tests/test_timerfd.py::TestTimerfd::test
+PASS python/rsyscall/tests/test_user.py::TestUser::test_ambient_caps
