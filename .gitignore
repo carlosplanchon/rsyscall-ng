@@ -1,0 +1,20 @@
+# local oracle (pinned upstream clone + locally built C library) and venv
+/reference/
+/.venv/
+
+# Python build artifacts; the editable install copies the cffi module in-tree
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.a
+/python/build/
+/python/dist/
+/python/*.egg-info/
+/python/rsyscall/_raw*.c
+/python/rsyscall/_nixdeps/
+
+# tool caches and logs
+.pytest_cache/
+.mypy_cache/
+*.log
