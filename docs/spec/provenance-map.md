@@ -330,7 +330,23 @@ if -4095 < response < 0:
 
 ## Open questions a spec must settle
 
-Resolved in: (to be filled by the specification documents.)
+Resolved in (see also `README.md` §6):
+
+1. `native-abi.md` §3.4 (register contract rdi/rsi, SIGSTOP before the futex, no stack use after the stop, exit on 0 or EAGAIN; EINTR and exit status unspecified with recommended defaults).
+2. `native-abi.md` §3.5 and §4 (entry state, loads from +8..+56, ABI-conformant entry; call vs jump implementation-defined; process terminates after return, exit status unspecified).
+3. `wire-protocol.md` §10 (plain server stops and returns, exit status unspecified; persistent server accepts again; no SIGPIPE death); executables: `bootstrap-handshakes.md` §6.
+4. `wire-protocol.md` §3.
+5. `native-abi.md` §1.
+6. `bootstrap-handshakes.md` §0 and `abi-layouts.generated.md`.
+7. `bootstrap-handshakes.md` §3 (stdin: unspecified, recommended -1) and §4 (stub: the third received fd).
+8. `bootstrap-handshakes.md` §4.
+9. `bootstrap-handshakes.md` §2.
+10. `bootstrap-handshakes.md` §0.
+11. `wire-protocol.md` §4.
+12. `bootstrap-handshakes.md` §0.
+13. `bootstrap-handshakes.md` §5.
+14. `bootstrap-handshakes.md` §2, §3 and §4.
+15. `native-abi.md` §4 and §9.
 
 1. **Futex helper arity.** The cdef says `void (*)(void *futex_addr)`, but Python passes `rsi = expected value` too (`clone.py` L57-60). The spec also has to define the helper's stop/continue order, how it handles EINTR, EAGAIN and spurious wakeups, and whether it may touch its stack after SIGSTOP ("we can deallocate the stack", yet L71 says it isn't actually freed).
 2. **The trampoline itself.** Python never says whether the trampoline calls or jumps to the target, what stack alignment the target sees on entry (only `child_stack % 16 == 0` at clone time), or what happens when the target function returns.

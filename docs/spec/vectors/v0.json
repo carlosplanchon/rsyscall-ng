@@ -1,0 +1,293 @@
+{
+  "vectors": [
+    {
+      "name": "request_write",
+      "hex": "01 00 00 00 00 00 00 00 | 01 00 00 00 00 00 00 00 | 00 10 00 00 00 00 00 00 | 0c 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "meaning": "struct rsyscall_syscall for write(1, 0x1000, 12): sys=1 | arg1=1 | arg2=0x1000 | arg3=12 | arg4..arg6=0 (unused arguments are sent as 0)",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:35-38",
+        "python/ffibuilder.py:1251-1254",
+        "python/rsyscall/near/sysif.py:43"
+      ],
+      "generator": "struct.pack('<7q', 1, 1, 0x1000, 12, 0, 0, 0)"
+    },
+    {
+      "name": "request_negative_arg",
+      "hex": "01 01 00 00 00 00 00 00 | 9c ff ff ff ff ff ff ff | 00 20 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "meaning": "openat(AT_FDCWD=-100, 0x2000, 0, 0): sys=257 | arg1=-100 as two's-complement int64 | arg2=0x2000 | arg3..arg6=0",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:35-38",
+        "python/rsyscall/unistd/exec.py:19-22"
+      ],
+      "generator": "struct.pack('<7q', 257, -100, 0x2000, 0, 0, 0, 0)"
+    },
+    {
+      "name": "request_memory_write",
+      "hex": "2d 00 00 00 00 00 00 00 | 0e 00 00 00 00 00 00 00 | 00 30 00 00 00 7f 00 00 | 2c 00 00 00 00 00 00 00 | 00 01 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "meaning": "memory write into the server process: recvfrom(server_fd=14, dest=0x7f0000003000, len=44, MSG_WAITALL=0x100, 0, 0); the 44 raw bytes follow this request on the same stream and the response is 44",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:158-168",
+        "python/rsyscall/sys/socket.py:592-600",
+        "python/rsyscall/sys/socket.py:679-681"
+      ],
+      "generator": "struct.pack('<7q', 45, 14, 0x7f0000003000, 44, 0x100, 0, 0)"
+    },
+    {
+      "name": "request_memory_read",
+      "hex": "2c 00 00 00 00 00 00 00 | 0e 00 00 00 00 00 00 00 | 00 30 00 00 00 7f 00 00 | 2c 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00",
+      "meaning": "memory read from the server process: sendto(server_fd=14, src=0x7f0000003000, len=44, flags=0, 0, 0); the server-to-client stream then carries the 44 bytes followed by the response 44",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:179-188",
+        "python/rsyscall/sys/socket.py:602-610",
+        "python/rsyscall/sys/socket.py:683-685"
+      ],
+      "generator": "struct.pack('<7q', 44, 14, 0x7f0000003000, 44, 0, 0, 0)"
+    },
+    {
+      "name": "response_ok",
+      "hex": "0c 00 00 00 00 00 00 00",
+      "meaning": "response for a syscall that returned 12: the raw kernel return value as int64",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:69-76",
+        "python/rsyscall/near/sysif.py:206-210"
+      ],
+      "generator": "struct.pack('<q', 12)"
+    },
+    {
+      "name": "response_enoent",
+      "hex": "fe ff ff ff ff ff ff ff",
+      "meaning": "response for a syscall that failed with ENOENT: -2 as two's-complement int64; the client raises OSError(2)",
+      "derived_from": [
+        "python/rsyscall/tasks/connection.py:74-76",
+        "python/rsyscall/near/sysif.py:206-210"
+      ],
+      "generator": "struct.pack('<q', -2)"
+    },
+    {
+      "name": "trampoline_stack",
+      "hex": "07 00 00 00 00 00 00 00 | 07 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | 00 10 00 00 00 7f 00 00",
+      "meaning": "struct rsyscall_trampoline_stack for Trampoline(function=0x7f0000001000, args=[7, 7]) as used for rsyscall_server(sock, sock): rdi=7 | rsi=7 | rdx,rcx,r8,r9=0 | function",
+      "derived_from": [
+        "python/rsyscall/loader.py:59-79",
+        "python/ffibuilder.py:1241-1249",
+        "python/rsyscall/thread.py:276-278"
+      ],
+      "generator": "struct.pack('<6qQ', 7, 7, 0, 0, 0, 0, 0x7f0000001000)"
+    },
+    {
+      "name": "stack_image",
+      "hex": "00 20 00 00 00 7f 00 00 | 07 00 00 00 00 00 00 00 | 07 00 00 00 00 00 00 00 | 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 | 00 10 00 00 00 7f 00 00",
+      "meaning": "the 64-byte stack image passed to clone as child_stack: address of rsyscall_trampoline (0x7f0000002000) | rdi | rsi | rdx..r9 | target function; rsp points at byte 0 when the child starts",
+      "derived_from": [
+        "python/rsyscall/sched.py:57-82",
+        "python/rsyscall/loader.py:135-137",
+        "python/rsyscall/handle/pointer.py:239-254"
+      ],
+      "generator": "struct.pack('<Q', 0x7f0000002000) + trampoline_stack"
+    },
+    {
+      "name": "futex_node",
+      "hex": "00 00 00 00 00 00 00 00 | 01 00 00 00 | 00 00 00 00",
+      "meaning": "FutexNode(next=None, futex=1) as written before clone: next=NULL | futex=1 (uint32) | 4 bytes of tail padding (zero)",
+      "derived_from": [
+        "python/rsyscall/linux/futex.py:23-32",
+        "python/rsyscall/tasks/clone.py:116",
+        "python/ffibuilder.py:1349-1356"
+      ],
+      "generator": "struct.pack('<QI4x', 0, 1)"
+    },
+    {
+      "name": "clone_args",
+      "hex": null,
+      "json": {
+        "argument_order": [
+          "flags",
+          "child_stack",
+          "ptid",
+          "ctid",
+          "newtls"
+        ],
+        "normal_child": {
+          "flags": [
+            "CLONE_VM",
+            "CLONE_CHILD_CLEARTID",
+            "SIGCHLD"
+          ],
+          "flags_value": "0x200111",
+          "optional_flags": [
+            "CLONE_PARENT when the cloning task is not the monitoring task",
+            "any CLONE_* the caller passes, e.g. CLONE_FILES"
+          ],
+          "child_stack": "address of the 64-byte stack image (16-byte aligned)",
+          "ptid": 0,
+          "ctid": "address of the FutexNode + 8 (offsetof(struct futex_node, futex))",
+          "newtls": 0
+        },
+        "futex_helper": {
+          "flags": [
+            "CLONE_VM",
+            "CLONE_FILES",
+            "SIGCHLD"
+          ],
+          "flags_value": "0x511",
+          "optional_flags": [
+            "CLONE_PARENT"
+          ],
+          "child_stack": "address of its own 64-byte stack image",
+          "ptid": 0,
+          "ctid": 0,
+          "newtls": 0
+        },
+        "persistent_child": {
+          "flags": [
+            "CLONE_FILES",
+            "CLONE_FS",
+            "CLONE_SIGHAND",
+            "CLONE_VM",
+            "CLONE_CHILD_CLEARTID",
+            "SIGCHLD"
+          ],
+          "flags_value": "0x200f11",
+          "optional_flags": [
+            "CLONE_PARENT"
+          ],
+          "ptid": 0,
+          "ctid": "address of the FutexNode + 8",
+          "newtls": 0
+        },
+        "constants": {
+          "CLONE_VM": "0x100",
+          "CLONE_FS": "0x200",
+          "CLONE_FILES": "0x400",
+          "CLONE_SIGHAND": "0x800",
+          "CLONE_PARENT": "0x8000",
+          "CLONE_CHILD_CLEARTID": "0x200000",
+          "SIGCHLD": 17
+        }
+      },
+      "meaning": "arguments of the raw clone syscall issued by the client, in argument order (flags, child_stack, ptid, ctid, newtls)",
+      "derived_from": [
+        "python/rsyscall/sched.py:139-151",
+        "python/rsyscall/tasks/clone.py:101-103",
+        "python/rsyscall/tasks/clone.py:63",
+        "python/rsyscall/tasks/persistent.py:291",
+        "python/rsyscall/monitor.py:300-302",
+        "python/rsyscall/handle/process.py:277-279"
+      ],
+      "generator": "constants of linux/sched.h on x86-64 (cross-checked with rsyscall._raw.lib in venv mode)"
+    },
+    {
+      "name": "persistent_count",
+      "hex": "02 00 00 00",
+      "meaning": "Int32(2): the native int32 count of passed fds that opens the persistent reconnection handshake",
+      "derived_from": [
+        "python/rsyscall/tasks/persistent.py:323",
+        "python/rsyscall/tasks/persistent.py:330",
+        "python/rsyscall/struct.py:108-123"
+      ],
+      "generator": "struct.pack('<i', 2)"
+    },
+    {
+      "name": "persistent_reply",
+      "hex": "05 00 00 00 | 06 00 00 00",
+      "meaning": "the server's reply to a count of 2: exactly two native int32 fd numbers in the order the fds were passed; decodes to [5, 6] (fd[0] becomes the server's new infd/outfd)",
+      "derived_from": [
+        "python/rsyscall/tasks/persistent.py:327",
+        "python/rsyscall/tasks/persistent.py:332-336",
+        "python/rsyscall/struct.py:142-166"
+      ],
+      "generator": "struct.pack('<2i', 5, 6)"
+    },
+    {
+      "name": "scm_rights_2fds",
+      "hex": "18 00 00 00 00 00 00 00 | 01 00 00 00 | 01 00 00 00 | 05 00 00 00 06 00 00 00",
+      "meaning": "control buffer the client sends to pass fds [5, 6]: cmsg_len=24 (u64) | cmsg_level=SOL_SOCKET | cmsg_type=SCM_RIGHTS | 2 int32 fd numbers; msg_controllen equals cmsg_len; no CMSG_ALIGN padding",
+      "derived_from": [
+        "python/rsyscall/sys/socket.py:304-314",
+        "python/rsyscall/sys/socket.py:328-329",
+        "python/rsyscall/sys/socket.py:362-368",
+        "python/rsyscall/sys/socket.py:389-398"
+      ],
+      "generator": "struct.pack('<Qii', 24, 1, 1) + struct.pack('<2i', 5, 6)"
+    },
+    {
+      "name": "scm_rights_3fds",
+      "hex": "1c 00 00 00 00 00 00 00 | 01 00 00 00 | 01 00 00 00 | 05 00 00 00 06 00 00 00 07 00 00 00",
+      "meaning": "control buffer the client sends to pass fds [5, 6, 7]: cmsg_len=28 (u64) | cmsg_level=SOL_SOCKET | cmsg_type=SCM_RIGHTS | 3 int32 fd numbers; msg_controllen equals cmsg_len; no CMSG_ALIGN padding",
+      "derived_from": [
+        "python/rsyscall/sys/socket.py:304-314",
+        "python/rsyscall/sys/socket.py:328-329",
+        "python/rsyscall/sys/socket.py:362-368",
+        "python/rsyscall/sys/socket.py:389-398"
+      ],
+      "generator": "struct.pack('<Qii', 28, 1, 1) + struct.pack('<3i', 5, 6, 7)"
+    },
+    {
+      "name": "scm_rights_4fds",
+      "hex": "20 00 00 00 00 00 00 00 | 01 00 00 00 | 01 00 00 00 | 05 00 00 00 06 00 00 00 07 00 00 00 08 00 00 00",
+      "meaning": "control buffer the client sends to pass fds [5, 6, 7, 8]: cmsg_len=32 (u64) | cmsg_level=SOL_SOCKET | cmsg_type=SCM_RIGHTS | 4 int32 fd numbers; msg_controllen equals cmsg_len; no CMSG_ALIGN padding",
+      "derived_from": [
+        "python/rsyscall/sys/socket.py:304-314",
+        "python/rsyscall/sys/socket.py:328-329",
+        "python/rsyscall/sys/socket.py:362-368",
+        "python/rsyscall/sys/socket.py:389-398"
+      ],
+      "generator": "struct.pack('<Qii', 32, 1, 1) + struct.pack('<4i', 5, 6, 7, 8)"
+    },
+    {
+      "name": "lp_string",
+      "hex": "09 00 00 00 00 00 00 00 | 50 41 54 48 3d 2f 62 69 6e",
+      "meaning": "a length-prefixed string as read by the client: u64 little-endian byte count | the bytes, no NUL terminator",
+      "derived_from": [
+        "python/rsyscall/epoller.py:769-776",
+        "python/rsyscall/epoller.py:785-801"
+      ],
+      "generator": "struct.pack('<Q', 9) + b'PATH=/bin'"
+    },
+    {
+      "name": "describe_stdin",
+      "hex": "00 10 40 00 00 00 00 00 00 11 40 00 00 00 00 00 00 12 40 00 00 00 00 00 00 13 40 00 00 00 00 00 | 92 10 00 00 | 03 00 00 00 | 04 00 00 00 | ff ff ff ff | 05 00 00 00 | 00 00 00 00 | 02 00 00 00 00 00 00 00",
+      "meaning": "struct rsyscall_stdin_bootstrap: symbols (4 code addresses 0x401000..0x401300) | pid=4242 | syscall_fd=3 | data_fd=4 | futex_memfd=-1 (value unspecified in v0; -1 is the recommended default) | connecting_fd=5 | padding | envp_count=2",
+      "derived_from": [
+        "python/ffibuilder.py:1269-1277",
+        "python/rsyscall/tasks/stdin_bootstrap.py:97-99",
+        "python/rsyscall/tasks/stdin_bootstrap.py:115-127"
+      ],
+      "generator": "struct.pack('<4Q5i4xQ', 0x401000, 0x401100, 0x401200, 0x401300, 4242, 3, 4, -1, 5, 2)"
+    },
+    {
+      "name": "describe_stub",
+      "hex": "00 10 40 00 00 00 00 00 00 11 40 00 00 00 00 00 00 12 40 00 00 00 00 00 00 13 40 00 00 00 00 00 | 92 10 00 00 | 05 00 00 00 | 06 00 00 00 | 07 00 00 00 | 08 00 00 00 | 00 00 00 00 | 02 00 00 00 00 00 00 00 | 02 00 00 00 00 00 00 00 | 00 02 00 00 00 00 00 00",
+      "meaning": "struct rsyscall_unix_stub: symbols | pid=4242 | syscall_fd=5 | data_fd=6 | futex_memfd=7 (the third received fd) | connecting_fd=8 | padding | argc=2 | envp_count=2 | sigmask=0x200 (bit 9 set: SIGUSR1 blocked)",
+      "derived_from": [
+        "python/ffibuilder.py:1278-1288",
+        "python/rsyscall/tasks/stub.py:139-142",
+        "python/rsyscall/tasks/stub.py:157-164"
+      ],
+      "generator": "struct.pack('<4Q5i4x3Q', 0x401000, 0x401100, 0x401200, 0x401300, 4242, 5, 6, 7, 8, 2, 2, 0x200)"
+    },
+    {
+      "name": "describe_bootstrap",
+      "hex": "00 10 40 00 00 00 00 00 00 11 40 00 00 00 00 00 00 12 40 00 00 00 00 00 00 13 40 00 00 00 00 00 | 92 10 00 00 | 04 00 00 00 | 05 00 00 00 | 06 00 00 00 | 02 00 00 00 00 00 00 00",
+      "meaning": "struct rsyscall_bootstrap: symbols | pid=4242 | listening_sock=4 | syscall_sock=5 | data_sock=6 | envp_count=2",
+      "derived_from": [
+        "python/ffibuilder.py:1261-1268",
+        "python/rsyscall/tasks/ssh.py:265-267",
+        "python/rsyscall/tasks/ssh.py:281-288"
+      ],
+      "generator": "struct.pack('<4Q4iQ', 0x401000, 0x401100, 0x401200, 0x401300, 4242, 4, 5, 6, 2)"
+    },
+    {
+      "name": "sigmask_sigchld",
+      "hex": "00 00 01 00 00 00 00 00",
+      "meaning": "sigmask field 0x10000: bit 16 set means signal 17 (SIGCHLD) is blocked; the client refuses such a mask because it needs to block SIGCHLD itself",
+      "derived_from": [
+        "python/rsyscall/tasks/stub.py:164",
+        "python/rsyscall/struct.py:100-105",
+        "python/rsyscall/signal.py:127-131",
+        "python/rsyscall/signal.py:281-283"
+      ],
+      "generator": "struct.pack('<Q', 1 << 16)"
+    }
+  ]
+}

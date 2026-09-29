@@ -1,0 +1,110 @@
+# Evolution notes (non-normative)
+
+This document binds nothing. It collects the changes a later protocol version could make, the
+Python-side defects noticed while deriving v0, and the gaps of the differential oracle. Nothing
+here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.md` and
+`bootstrap-handshakes.md`.
+
+## Versioning and hello
+
+- v0 has no version marker anywhere: the first bytes on a syscall socket are already a request
+  (`wire-protocol.md` §1). A v1 could begin every connection with a fixed hello (magic, version,
+  capability bits) or export a differently named entry point, so that a client can detect which
+  protocol a server speaks. The describe structs are similarly unversioned; a `version` field at
+  the start of `struct rsyscall_symbol_table` would cover the bootstraps too.
+
+## Architecture neutrality
+
+- The stack image names x86-64 registers (`python/ffibuilder.py:1241-1249`) but is really "six
+  integer arguments plus a target": a neutral layout would call the slots `arg0..arg5`, keep the
+  same offsets, and let each architecture's trampoline map them to its argument registers.
+- An aarch64 mapping of the same 64-byte image: `x0..x5` from offsets +8..+48, the target from
+  +56. The entry mechanism differs: on x86-64 the cloned child pops the trampoline address with
+  `ret` (`native-abi.md` §3.5), whereas on aarch64 `ret` returns through `x30`, so the raw
+  syscall primitive in the child would instead load the trampoline address from `[sp]` and branch
+  to it. The `clone` wrapper on aarch64 also takes its arguments in a different order than the
+  x86-64 raw syscall.
+- The describe structs are parsed with the client's own `ffi` (`native-abi.md` §1). Mixed-ABI
+  deployments over ssh would need either a fixed cross-platform encoding (explicit little-endian
+  fixed-width fields) or a per-host `ffi`.
+
+## Stacks, TLS and clone flags
+
+- The 4096-byte stack without a guard page (`native-abi.md` §4) is small for anything but
+  hand-written code. A larger allocation with a `PROT_NONE` guard page below it would turn an
+  overflow into a crash of the child instead of silent corruption of the shared address space.
+- `newtls` is always 0 (`python/rsyscall/sched.py:149-150`), so the child has no TLS of its own.
+  Passing `CLONE_SETTLS` with a per-child TLS block would allow trampoline-entered code to be
+  ordinary compiled code (including `errno` and Rust's thread-local machinery).
+- The futex helper's stack is never freed (`python/rsyscall/tasks/clone.py:71`). Because the
+  helper stops itself before touching the futex, the client could free it after the stop, or the
+  helper could be replaced by something that needs no stack at all.
+
+## Futex helper
+
+- The cdef declares one parameter but the client passes two (`native-abi.md` §3.4). Declaring
+  `void rsyscall_futex_helper(uint32_t *addr, uint32_t expected)` would make the ABI honest.
+- `EINTR` handling and spurious wake-ups are unspecified in v0. A v1 could require a re-check of
+  the futex word and a loop, and define the exit status.
+- The `SIGSTOP`/`SIGCONT` dance only exists to tell the client that the helper has finished
+  reading its stack. A pipe, an eventfd or a flag word written by the helper would give the same
+  signal without job-control semantics and would let the helper run under a debugger.
+
+## Wire protocol
+
+- Request ids would allow out-of-order completion and concurrent servers; batching several
+  requests behind one length field would cut the number of `read` calls. The current docstring
+  already promises batching that the code does not do (`python/rsyscall/tasks/connection.py:7-9`).
+- Arguments and results are signed `int64` (`wire-protocol.md` §2, §4). Unsigned 64-bit
+  arguments are representable only through their two's-complement image; an explicit unsigned
+  encoding would remove the ambiguity for values with the top bit set.
+- The client treats `-4095 < r < 0` as an error (`python/rsyscall/near/sysif.py:206-210`), which
+  excludes -4095 while the kernel's error range includes it. A future client could use
+  `-4096 < r < 0`.
+
+## Bootstraps
+
+- The SCM_RIGHTS control buffer is written without `CMSG_ALIGN` padding and the client says so
+  ("TODO is this correct alignment/padding???", `python/rsyscall/sys/socket.py:365-366`). A v1
+  client would pad to `CMSG_SPACE`.
+- The 1-byte payload of every fd-passing message is uninitialised memory
+  (`python/rsyscall/tasks/stdin_bootstrap.py:87`, `python/rsyscall/tasks/stub.py:128`,
+  `python/rsyscall/tasks/persistent.py:324`). Initialising it to 0 costs nothing.
+- Array counts live in struct fields while the docstring of `read_length_prefixed_array` describes
+  a count on the wire (`python/rsyscall/epoller.py:778-783`). Either the docstring or the
+  encoding could change; putting counts on the wire would make the strings self-describing.
+- `read_length_prefixed_string` swallows an `EOFError` raised while reading the bytes of a string:
+  the `except` block sets the message but does not re-raise (`python/rsyscall/epoller.py:772-776`).
+  A truncated describe therefore surfaces as a confusing later error instead of an `EOFError`.
+- The `stub.py` module docstring names the environment variable `RSYSCALL_UNIX_STUB_SOCK`
+  (`python/rsyscall/tasks/stub.py:7-8`) while the code sets `RSYSCALL_UNIX_STUB_SOCK_PATH`
+  (`python/rsyscall/tasks/stub.py:97`).
+- The comment "Connect to local socket 4 times" (`python/rsyscall/tasks/ssh.py:256`) is stale;
+  the code connects twice.
+- `futex_memfd` is passed by the stub client and reported by two describe structs but never used
+  (`python/rsyscall/tasks/stub.py:182-183`); dropping it (or defining what the memfd is for) would
+  simplify the handshakes.
+- No client path starts an `rsyscall-server` executable, although the oracle build checks for
+  one (`scripts/oracle-build.sh`); the Rust implementation does not need to ship it.
+- The helper executables are located through `rsyscall._nixdeps.librsyscall`
+  (`python/rsyscall/tasks/ssh.py:101`, `python/rsyscall/tasks/stdin_bootstrap.py:52`,
+  `python/rsyscall/tasks/stub.py:89`) via `rsyscall.nix`, which imports the `nixdeps` build hook at
+  module level (`python/rsyscall/nix.py:25`). Decoupling the path lookup from Nix would let the
+  bootstrap tests run without a Nix store (see "Oracle gaps").
+
+## Python-side defects noticed
+
+- `python/rsyscall/unistd/exec.py:19-20` uses `AT.FDCWD` without importing `AT`; the branch is
+  unreachable in the test-suite.
+- `pyroute2` is imported (`python/rsyscall/linux/rtnetlink.py:2`) but not declared in
+  `install_requires` (`python/setup.py:18`); only the optional `test_net.py` notices.
+
+## Oracle gaps
+
+- `tests/baseline-c.txt` exercises the in-process clone server, the futex helper and the trampoline
+  through the core test modules, but none of the three helper executables and not the persistent
+  server: `test_ssh.py`, `test_stdinboot.py`, `test_stub.py` and `test_persistent.py` are excluded
+  from collection because they import Nix-dependent modules (`python/rsyscall/tests/conftest.py:19-29`,
+  `tests/baseline-notes.md`). The handshakes in `bootstrap-handshakes.md` §2 to §5 are therefore
+  backed by `python/` and by the black-box observations listed in `README.md` §4, not by the
+  recorded baseline. A future baseline should include those modules once the Nix coupling is gone.

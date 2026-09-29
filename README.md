@@ -23,7 +23,8 @@ oracle*.
 - [x] test harness migrated off `trio.MultiError`
 - [x] baseline of the upstream test-suite recorded against the original C
       backend (`tests/baseline-c.txt`)
-- [ ] protocol specification, Rust native crate, wheels, CI (later phases)
+- [x] clean-room v0 specification of the native side (`docs/spec/`)
+- [ ] Rust native crate, wheels, CI (later phases)
 
 ## Layout
 
@@ -32,6 +33,7 @@ oracle*.
 | `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`, `rsysapps`) |
 | `scripts/`                 | oracle build, venv setup, baseline runner, smoke test        |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
+| `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
 | `reference/` (gitignored)  | pinned upstream clone and the locally built C oracle        |
 | `.venv/` (gitignored)      | development virtualenv created by `make venv`               |
 

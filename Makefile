@@ -1,5 +1,5 @@
 SHELL := bash
-.PHONY: help oracle venv hello baseline test clean-venv clean-reference
+.PHONY: help oracle venv hello baseline test spec-check clean-venv clean-reference
 
 help:
 	@echo "targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  hello            smoke test: clone a process, write to its stdout, exec echo"
 	@echo "  baseline         run the suite and write tests/baseline-c.txt"
 	@echo "  test             run pytest; pass arguments with PYTEST_ARGS='...'"
+	@echo "  spec-check       verify docs/spec: generated layouts and vectors are current, citations valid"
 	@echo "  clean-venv       remove .venv and in-tree build artifacts"
 	@echo "  clean-reference  remove reference/ (oracle clone and build)"
 
@@ -25,6 +26,11 @@ baseline:
 
 test:
 	source scripts/env.sh && "$$PY" -m pytest $(PYTEST_ARGS)
+
+spec-check:
+	python3 scripts/abi-layouts.py --check docs/spec/abi-layouts.generated.md
+	source scripts/env.sh && "$$PY" scripts/spec-vectors.py --check docs/spec/vectors/v0.json
+	python3 scripts/spec-lint.py
 
 clean-venv:
 	rm -rf .venv python/rsyscall/_raw*.so python/rsyscall/_raw*.c python/build python/*.egg-info
