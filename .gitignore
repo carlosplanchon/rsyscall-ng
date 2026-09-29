@@ -18,3 +18,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 *.log
+
+# Rust native side: install prefix and cargo build directory; its venv
+/native/prefix/
+/native/target/
+/.venv-rust/

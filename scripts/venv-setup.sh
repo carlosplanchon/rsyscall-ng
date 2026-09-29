@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Create .venv and install python/ in editable mode, building the cffi extension
-# rsyscall._raw against the oracle in reference/prefix.
+# Create the backend's venv ($VENV) and install python/ in editable mode, building the cffi
+# extension rsyscall._raw against the backend's prefix ($PREFIX); see scripts/env.sh.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 
 if [ ! -f "$PREFIX/lib/pkgconfig/rsyscall.pc" ]; then
-    echo "oracle not built; run 'make oracle' first" >&2
+    echo "no native prefix for BACKEND=$BACKEND at $PREFIX; run 'make oracle' (c) or 'make native' (rust) first" >&2
     exit 1
 fi
 [ -x "$PY" ] || uv venv --python 3.14 "$VENV"
