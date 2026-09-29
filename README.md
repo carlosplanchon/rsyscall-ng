@@ -11,12 +11,13 @@ are then shaped with ordinary syscalls (`unshare`, `execve`, ...) instead of
 Upstream has been dormant since 2022-07-25 and its PyPI package no longer
 installs. rsyscall-ng keeps the upstream Python API (imported with its full git
 history under `python/`) and brings it to current Python (>= 3.12) and trio.
-The small native part (a syscall server, a `clone` trampoline and a futex
-helper, currently C + x86_64 assembly upstream) will be rewritten in Rust; until
-then the unmodified upstream C is built locally as a *differential test
-oracle*.
+The small native part (a syscall server, a `clone` trampoline, a futex helper
+and three bootstrap helpers, C + x86_64 assembly upstream) has been
+reimplemented in Rust under `native/`, clean-room from the specification in
+`docs/spec/`. The unmodified upstream C is still built locally, only as a
+*differential test oracle* (`BACKEND=c`).
 
-## Status: phase 0
+## Status
 
 - [x] upstream `python/` imported with history (commit `2a36209`, 2022-07-25)
 - [x] compatibility patches for Python 3.12+ / current trio and outcome
@@ -24,7 +25,11 @@ oracle*.
 - [x] baseline of the upstream test-suite recorded against the original C
       backend (`tests/baseline-c.txt`)
 - [x] clean-room v0 specification of the native side (`docs/spec/`)
-- [ ] Rust native crate, wheels, CI (later phases)
+- [x] Rust native side (`native/`): `librsyscall.so` and the three helper
+      executables, byte-compatible with the C oracle (`make baseline-diff` is
+      empty; `make probe-diff` differs only where the specification leaves
+      behaviour unspecified)
+- [ ] PyO3/maturin packaging, wheels, CI (later phases)
 
 ## Layout
 
@@ -34,8 +39,11 @@ oracle*.
 | `scripts/`                 | oracle build, venv setup, baseline runner, smoke test        |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
 | `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
+| `native/`                  | clean-room Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
+| `native/prefix/` (gitignored) | the Rust native side installed by `make native` with the oracle's layout |
+| `tests/baseline-rust.txt`  | the same suite recorded against the Rust backend; identical to the C one |
 | `reference/` (gitignored)  | pinned upstream clone and the locally built C oracle        |
-| `.venv/` (gitignored)      | development virtualenv created by `make venv`               |
+| `.venv/`, `.venv-rust/` (gitignored) | the virtualenv of each backend, created by `make venv` |
 
 ## Quick start
 
@@ -47,6 +55,18 @@ make oracle     # clone upstream at the pinned commit and build c/ into referenc
 make venv       # .venv with an editable install of python/ built against the oracle
 make hello      # clone a child process, write to its stdout, exec `echo`
 make baseline   # run the suite and (re)generate tests/baseline-c.txt
+```
+
+The Rust native side is selected with `BACKEND=rust`, which switches the prefix
+(`native/prefix`), the virtualenv (`.venv-rust`) and the recorded baseline:
+
+```sh
+make native                                       # cargo build, install into native/prefix, ELF checks
+make venv BACKEND=rust && make hello BACKEND=rust
+make baseline BACKEND=rust && make baseline-diff  # tests/baseline-rust.txt vs tests/baseline-c.txt
+make probe-diff                                   # black-box probes of the helper executables, both backends
+make native-test                                  # the crate's own tests (cargo test -p rsyscall-core)
+python3 scripts/header-check.py                   # rsyscall.h against the spec's layout tables
 ```
 
 The cffi extension `rsyscall._raw` is linked against `reference/prefix/lib`
@@ -71,7 +91,8 @@ the timeout, so in a single process one hanging test would poison the rest.
 
 ## Licensing
 
-New code is MIT, Copyright (c) 2026 Carlos Andrés Planchón Prestes (see
-`LICENSE`). `python/` is MIT per upstream package metadata, Copyright
-2018-2022 Spencer Baugh and contributors. Upstream `c/` is intentionally not
-part of this repository. See `NOTICE` for details.
+New code, including all of `native/`, is MIT, Copyright (c) 2026 Carlos Andrés
+Planchón Prestes (see `LICENSE`). `python/` is MIT per upstream package
+metadata, Copyright 2018-2022 Spencer Baugh and contributors. Upstream `c/` is
+intentionally not part of this repository; `native/` was written from
+`docs/spec/` alone, without access to it. See `NOTICE` for details.

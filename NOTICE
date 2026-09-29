@@ -35,6 +35,18 @@ rsyscall-ng -- provenance and licensing notice
 4. "rsyscall" is the name of the upstream project. This repository is an
    independent modernization effort and is not endorsed by upstream.
 
+5. native/ is new code under the MIT License (item 1). It reimplements the
+   native side of rsyscall from scratch as a clean-room work: it was written on
+   2026-09-29 from the specification in docs/spec/ alone, by an agent whose
+   read access excluded reference/, every C and assembly source and the Python
+   internals; the specification itself had been derived exclusively from the
+   MIT-licensed python/ tree (docs/spec/README.md §4). The reviewer, who had
+   read the upstream C earlier for an unrelated analysis, authored none of the
+   specification or of native/ and reviewed both against docs/spec/ only. The
+   upstream binaries built under reference/ served solely as a black-box test
+   oracle (recorded test outcomes and observed behaviour). See
+   native/README.md.
+
 ----------------------------------------------------------------------
 MIT License (upstream python/ code)
 

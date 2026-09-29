@@ -2,6 +2,8 @@
 name = "rsyscall-core"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Freestanding core of the clean-room Rust native side of rsyscall: x86-64 assembly primitives, raw syscall wrappers, the wire codec and the server loops"
 publish = false
 
 [lib]

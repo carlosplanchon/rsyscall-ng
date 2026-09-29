@@ -78,7 +78,7 @@ pub fn diag(prog: &[u8], msg: &[u8], errno: Option<i64>) {
     diag_to(2, prog, &[msg], errno);
 }
 
-/// `<prog>: <a><b>[: <errno text>]` on stderr (e.g. `unknown type ` + argv[1]).
+/// `<prog>: <a><b>[: <errno text>]` on stderr (e.g. `unknown type ` + `argv[1]`).
 pub fn diag2(prog: &[u8], a: &[u8], b: &[u8], errno: Option<i64>) {
     diag_to(2, prog, &[a, b], errno);
 }

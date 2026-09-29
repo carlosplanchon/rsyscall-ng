@@ -2,6 +2,8 @@
 name = "rsyscall-native"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "librsyscall.so and the rsyscall helper executables: the clean-room Rust reimplementation of the rsyscall native side (v0 of docs/spec)"
 publish = false
 build = "build.rs"
 
