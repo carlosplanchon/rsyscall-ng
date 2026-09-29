@@ -10,6 +10,12 @@ from rsyscall import local_process, Process
 
 @contextlib.contextmanager
 def raise_unraisables():
+    """Re-raise "unraisable" exceptions (e.g. raised in __del__) seen inside the block
+
+    A single unraisable exception is re-raised as-is, as trio.MultiError([x]) used to
+    collapse to x; several are raised together as a BaseExceptionGroup.
+
+    """
     unraisables = []
     try:
         orig_unraisablehook, sys.unraisablehook = sys.unraisablehook, unraisables.append
@@ -17,7 +23,18 @@ def raise_unraisables():
     finally:
         sys.unraisablehook = orig_unraisablehook
         if unraisables:
-            raise trio.MultiError([unr.exc_value for unr in unraisables])
+            excs = [unr.exc_value if unr.exc_value is not None
+                    else RuntimeError(unr.err_msg or "unraisable exception", unr.object)
+                    for unr in unraisables]
+            if len(excs) == 1:
+                raise excs[0]
+            raise BaseExceptionGroup("unraisable exceptions during test", excs)
+
+def _unwrap_single(exn: BaseException) -> BaseException:
+    "Strip BaseExceptionGroup wrappers around exactly one exception (trio >= 0.25 strict nurseries)"
+    while isinstance(exn, BaseExceptionGroup) and len(exn.exceptions) == 1:
+        exn = exn.exceptions[0]
+    return exn
 
 class TrioTestCase(unittest.TestCase):
     "A trio-enabled variant of unittest.TestCase"
@@ -71,7 +88,15 @@ class TrioTestCase(unittest.TestCase):
                 # Restore the old warning filter after the test.
                 with warnings.catch_warnings():
                     warnings.filterwarnings('error', message='.*was never awaited', category=RuntimeWarning)
-                    trio.run(test_with_setup)
+                    try:
+                        trio.run(test_with_setup)
+                    except BaseExceptionGroup as eg:
+                        # trio >= 0.25 nurseries wrap even a single exception in an
+                        # ExceptionGroup; unwrap it so tests see the original exception type.
+                        exn = _unwrap_single(eg)
+                        if exn is eg:
+                            raise
+                        raise exn from None
         setattr(self, methodName, types.MethodType(sync_test_with_setup, self))
         super().__init__(methodName)
 
