@@ -26,6 +26,10 @@ case $rc in
     *) echo "pytest exited with status $rc (interrupted, usage or internal error); baseline not trusted" >&2
        exit "$rc" ;;
 esac
+if ! grep -q -E '^(PASS|FAIL|SKIP|XFAIL|XPASS) ' "$OUT"; then
+    echo "no test was executed (collection failed?); baseline not trusted" >&2
+    exit 3
+fi
 echo
 echo "wrote $OUT:"
 head -3 "$OUT"
