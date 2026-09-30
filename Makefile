@@ -1,7 +1,7 @@
 SHELL := bash
 BACKEND ?= c
 export BACKEND
-.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-manylinux wheel-test clean-venv clean-reference clean-native clean-dist
+.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-manylinux wheel-test sdist sdist-test clean-venv clean-reference clean-native clean-dist
 
 help:
 	@echo "targets (BACKEND=c|rust selects the native implementation; default c):"
@@ -18,8 +18,11 @@ help:
 	@echo "  probe-diff       run the probes against both backends and diff the normalised output"
 	@echo "  spec-check       verify docs/spec: generated layouts and vectors are current, citations valid"
 	@echo "  wheel            build the wheel (bundles the Rust native side) into dist/"
-	@echo "  wheel-manylinux  check the wheel with auditwheel and retag it as manylinux_2_17 (uvx: auditwheel + patchelf)"
+	@echo "  wheel-manylinux  check the wheel (auditwheel, abi3audit) and retag it as manylinux_2_17 (uvx)"
 	@echo "  wheel-test       install the newest wheel into a throwaway venv and exercise it away from the source tree"
+	@echo "                   (RSYSCALL_WHEEL_PYTHON=3.12|3.13|3.14 selects the interpreter; default 3.14)"
+	@echo "  sdist            build the source distribution into dist/"
+	@echo "  sdist-test       build a wheel from the sdist outside the repository, as pip would (cargo included), and test it like wheel-test"
 	@echo "  clean-venv       remove both venvs and in-tree build artifacts"
 	@echo "  clean-reference  remove reference/ (oracle clone and build)"
 	@echo "  clean-native     remove native/prefix and native/target"
@@ -74,9 +77,16 @@ wheel:
 
 wheel-manylinux:
 	uvx --with patchelf --from auditwheel auditwheel repair --plat manylinux_2_17_x86_64 -w dist dist/rsyscall_ng-*-linux_x86_64.whl && rm dist/rsyscall_ng-*-linux_x86_64.whl
+	uvx abi3audit --strict --summary dist/rsyscall_ng-*-manylinux*.whl
 
 wheel-test:
 	scripts/wheel-test.sh
+
+sdist:
+	rm -f dist/rsyscall_ng-*.tar.gz && uv build --sdist --out-dir dist .
+
+sdist-test: sdist
+	scripts/wheel-test.sh "$$(ls -t dist/rsyscall_ng-*.tar.gz | head -1)"
 
 clean-native:
 	rm -rf native/prefix native/target

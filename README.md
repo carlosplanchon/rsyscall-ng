@@ -31,7 +31,9 @@ reimplemented in Rust under `native/`, clean-room from the specification in
       behaviour unspecified)
 - [x] PEP 517 packaging: `pip install .` and `make wheel` build an abi3 wheel
       that bundles the Rust native side (`rsyscall/_native`); `make wheel-test`
-      checks the installed wheel against the recorded baseline
+      checks the installed wheel against the recorded baseline on CPython 3.12,
+      3.13 and 3.14, and `make sdist-test` does the same for a wheel built from
+      the sdist outside the repository
 - [x] bootstrap helpers decoupled from Nix: `rsyscall.tasks.{stub,stdin_bootstrap,ssh}`
       take them from `rsyscall._native` and OpenSSH from `PATH`; `test_stub`,
       `test_stdinboot`, `test_persistent` and `test_ssh` are in the baseline, so the
@@ -99,11 +101,20 @@ neither Nix nor a prefix:
 ```sh
 uv pip install .        # or pip install .: builds native/ with cargo, nothing else to set up
 make wheel              # dist/rsyscall_ng-*.whl, abi3 (CPython 3.12+), from a clean dist/
-make wheel-manylinux    # check it with auditwheel and retag it as manylinux_2_17 (uvx: auditwheel + patchelf)
+make wheel-manylinux    # check it (auditwheel, abi3audit) and retag it as manylinux_2_17 (uvx)
 make wheel-test         # install the newest wheel into .venv-wheel and exercise it from /tmp:
                         # import, bundled helpers, smoke test, test-suite vs tests/baseline-rust.txt
-uv build --sdist        # source distribution: python/ plus the native/ sources and docs/spec/
+RSYSCALL_WHEEL_PYTHON=3.12 make wheel-test   # the same on another interpreter (3.12, 3.13, 3.14)
+make sdist              # source distribution: python/ plus the native/ sources and docs/spec/
+make sdist-test         # unpack it outside the repository, build a wheel as pip would
+                        # (isolated PEP 517 build, cargo included) and test it like wheel-test
 ```
+
+The wheel is tagged `cp312-abi3`: the cffi extension uses only the stable ABI
+(`abi3audit` finds no violation), so one wheel serves every CPython from 3.12 on.
+Both the wheel and a wheel built from the sdist give the recorded baseline's
+per-test results on 3.12, 3.13 and 3.14. Building from the sdist needs cargo
+(Rust 1.85+) and a C compiler on the installing machine.
 
 `rsyscall._native.helper(name)` returns the path of a bundled helper executable
 (or of the one under `RSYSCALL_LIBEXEC_DIR`, when set) and `library_path()` the
