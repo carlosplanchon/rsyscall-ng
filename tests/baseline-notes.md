@@ -24,8 +24,9 @@ modules only; the helper tests joined on 2026-09-30, see below.)
   Fails while bind-mounting `/proc` into a temporary directory inside a fresh user and
   mount namespace (`Process.mount` -> `mount(2)` returns EINVAL). The cause on this host
   has not been investigated; the compat patches are not involved (the failure is a
-  kernel return value). Treat as environment-dependent until it can be checked on a
-  second machine or in CI.
+  kernel return value). It is environment-dependent: the same test passes in an Ubuntu
+  24.04 container running on the very same kernel (the CI simulation), so the EINVAL comes
+  from this host's mount setup, not from the kernel or from rsyscall.
 
 - `test_concurrency.py::TestConcurrency::test_nursery` (FAIL, `MyException: ha ha`).
   `sleep_and_throw()` raises `MyException` from inside its own nursery. Since trio 0.25
@@ -98,6 +99,15 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   `uint16_t total_extlen; uint16_t padding`, and cffi's API mode checks the cdef against the
   compiler's layout at first use. The cdef in `python/ffibuilder.py` now matches (same line,
   the file's line numbers are cited by `docs/spec`); `FuseInHeader` never read the field.
+- Every test that uses `make_local_ssh` (all of `test_ssh.py` and `test_persistent.py`)
+  failed with `EOFError` for users whose umask is 0002, the default for login sessions on
+  Ubuntu and other distributions with per-user groups. `make_local_ssh` keeps its key files
+  open after the temporary directory holding them is removed, and the cleanup of `mkdtemp`
+  ran `chmod -R +w` first; a bare `+w` follows the umask, so with 0002 it made the still-open
+  private key group-writable and `sshd` refused to load it ("UNPROTECTED PRIVATE KEY FILE").
+  The cleanup now runs `chmod -R u+w`, which is all `rm -rf` needs
+  (`python/rsyscall/stdlib/mktemp.py`). Found by running the CI jobs in an Ubuntu 24.04
+  container under `su -`.
 - `test_persistent.py::TestPersistent::test_ssh_same` and `test_ssh_new` failed with the Rust
   helpers only, deterministically, with `SyscallHangup`: after `reconnect()` the client re-sends
   a memory read whose remote `sendto` still names the old, shut-down socket, expecting `EPIPE`

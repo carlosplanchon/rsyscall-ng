@@ -38,15 +38,18 @@ class TemporaryDirectory(Path):
         """Delete this temporary directory and everything inside it.
 
         We do this cleanup by execing sh; that's the cheapest way to do it.  We have to
-        chmod -R +w the directory before we rm -rf it, because the directory might contain
-        files without the writable bit set, which would prevent us from deleting it.
+        chmod -R u+w the directory before we rm -rf it, because the directory might contain
+        files without the writable bit set, which would prevent us from deleting it.  Only the
+        owner's bit: a bare +w follows the umask, and with a umask of 0002 it would also make
+        group-writable the files a caller still holds open (tasks/ssh.py keeps its keys so, and
+        sshd then rejects them).
 
         """
         # TODO would be nice if not sharing the fs information gave us a cap to chdir
         cleanup = await self.process.fork()
         await cleanup.task.chdir(await cleanup.task.ptr(self.parent))
         child = await cleanup.exec(self.process.environ.sh.args(
-            '-c', f"chmod -R +w -- {self.name} && rm -rf -- {self.name}"))
+            '-c', f"chmod -R u+w -- {self.name} && rm -rf -- {self.name}"))
         await child.check()
 
     async def __aenter__(self) -> Path:
