@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Install the freshly built wheel into a throwaway venv and exercise it away from the source
+# Install the newest wheel in dist/ into a throwaway venv and exercise it away from the source
 # tree and without any of the development environment variables: import, loaded library,
-# bundled helpers, the smoke test, and the package's own test-suite.
+# bundled helpers, the smoke test, and the package's own test-suite, whose per-test results
+# must match tests/baseline-rust.txt (the wheel bundles the Rust native side).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WHEEL=$(ls -t "$ROOT"/dist/rsyscall_ng-*.whl | head -1)
@@ -24,5 +25,9 @@ for h in native.HELPERS:
 PY
 echo "== smoke test"
 run "$ROOT/scripts/hello.py"
-echo "== package test-suite from the installed wheel (test_repl hangs by design, see tests/baseline-notes.md)"
-run -m pytest --pyargs rsyscall.tests -q -p no:cacheprovider --timeout=60 -k "not test_repl" 2>&1 | tail -4
+echo "== package test-suite from the installed wheel, compared with tests/baseline-rust.txt"
+echo "   (test_repl deselected: it hangs and poisons the rest, see tests/baseline-notes.md)"
+RSYSCALL_BASELINE_OUT="$VENV/results.txt" RSYSCALL_BACKEND=rust \
+    run "$ROOT/scripts/pytest_session.py" "$VENV/pytest.log" --pyargs rsyscall.tests -q --timeout=60 -k "not test_repl" || true
+tail -n 3 "$VENV/pytest.log" | sed 's/^/   /'
+python3 "$ROOT/scripts/baseline-compare.py" "$ROOT/tests/baseline-rust.txt" "$VENV/results.txt" --ignore test_repl

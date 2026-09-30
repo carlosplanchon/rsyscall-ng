@@ -11,4 +11,6 @@ prune native/target
 prune native/prefix
 prune reference
 exclude python/rsyscall/_raw*.so python/rsyscall/_raw*.c
+# prebuilt native artefacts are not source: a bundled build regenerates them (setup.py)
+exclude python/rsyscall/_native/librsyscall.so python/rsyscall/_native/rsyscall-*
 global-exclude __pycache__ *.py[cod]

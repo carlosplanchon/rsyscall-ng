@@ -29,14 +29,19 @@ reimplemented in Rust under `native/`, clean-room from the specification in
       executables, byte-compatible with the C oracle (`make baseline-diff` is
       empty; `make probe-diff` differs only where the specification leaves
       behaviour unspecified)
-- [ ] PyO3/maturin packaging, wheels, CI (later phases)
+- [x] PEP 517 packaging: `pip install .` and `make wheel` build an abi3 wheel
+      that bundles the Rust native side (`rsyscall/_native`); `make wheel-test`
+      checks the installed wheel against the recorded baseline
+- [ ] decoupling the bootstrap helpers from Nix, CI, aarch64 (later phases)
 
 ## Layout
 
 | Path                       | What                                                        |
 |----------------------------|-------------------------------------------------------------|
 | `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`, `rsysapps`) |
-| `scripts/`                 | oracle build, venv setup, baseline runner, smoke test        |
+| `pyproject.toml`, `setup.py`, `MANIFEST.in` | PEP 517 packaging of `python/` (setuptools + cffi); `setup.py` builds `native/` with cargo and bundles its artefacts |
+| `python/rsyscall/_native/` | `rsyscall._native`: where the bundled `librsyscall.so` and helper executables live, and how to find them |
+| `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
 | `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
 | `native/`                  | clean-room Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
@@ -44,11 +49,14 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 | `tests/baseline-rust.txt`  | the same suite recorded against the Rust backend; identical to the C one |
 | `reference/` (gitignored)  | pinned upstream clone and the locally built C oracle        |
 | `.venv/`, `.venv-rust/` (gitignored) | the virtualenv of each backend, created by `make venv` |
+| `dist/`, `.venv-wheel/` (gitignored) | wheels and sdists from `make wheel`; the throwaway venv of `make wheel-test` |
 
 ## Quick start
 
-Requirements: Linux x86_64, git, [uv](https://docs.astral.sh/uv/), a C
-toolchain with autotools, libtool and pkg-config, and the Linux kernel headers.
+Requirements: Linux x86_64, git, [uv](https://docs.astral.sh/uv/), a C compiler
+(for the cffi extension), Rust 1.85+ with cargo (`native/` uses edition 2024)
+and, for the C oracle only, autotools, libtool, pkg-config and the Linux kernel
+headers.
 
 ```sh
 make oracle     # clone upstream at the pinned commit and build c/ into reference/prefix
@@ -69,10 +77,35 @@ make native-test                                  # the crate's own tests (cargo
 python3 scripts/header-check.py                   # rsyscall.h against the spec's layout tables
 ```
 
-The cffi extension `rsyscall._raw` is linked against `reference/prefix/lib`
-with an rpath baked in by `make venv`, so `import rsyscall` works from the
-`.venv` without further setup. The scripts also export `LD_LIBRARY_PATH` as a
-belt-and-braces measure.
+In this development flow `scripts/env.sh` exports `RSYSCALL_NATIVE=prefix`: the
+cffi extension `rsyscall._raw` is linked through pkg-config against the selected
+backend's prefix, with its rpath baked in by `make venv` (plus `LD_LIBRARY_PATH`
+as a belt-and-braces measure, since both venvs share the in-tree extension), and
+`RSYSCALL_LIBEXEC_DIR` points `rsyscall._native` at that prefix's helper
+executables. Nothing from `native/` is copied into `python/` in this mode.
+
+## Installing and wheels
+
+Outside the development flow the default mode, `bundled`, applies: `setup.py`
+runs `cargo build --release` in `native/`, copies `librsyscall.so` and the three
+helper executables into `rsyscall/_native/` and links the extension with an
+`$ORIGIN/_native` rpath, so the installed package is self-contained and needs
+neither Nix nor a prefix:
+
+```sh
+uv pip install .        # or pip install .: builds native/ with cargo, nothing else to set up
+make wheel              # dist/rsyscall_ng-*.whl, abi3 (CPython 3.12+), from a clean dist/
+make wheel-manylinux    # check it with auditwheel and retag it as manylinux_2_17 (uvx: auditwheel + patchelf)
+make wheel-test         # install the newest wheel into .venv-wheel and exercise it from /tmp:
+                        # import, bundled helpers, smoke test, test-suite vs tests/baseline-rust.txt
+uv build --sdist        # source distribution: python/ plus the native/ sources and docs/spec/
+```
+
+`rsyscall._native.helper(name)` returns the path of a bundled helper executable
+(or of the one under `RSYSCALL_LIBEXEC_DIR`, when set) and `library_path()` the
+bundled `librsyscall.so`, or `None` when the extension was linked against a
+prefix. Wheels bundle only artefacts built from `native/`; the upstream C is
+never packaged.
 
 ## Running tests
 
@@ -88,6 +121,10 @@ description of reality, not a promise that everything passes. `make baseline`
 runs every test in its own interpreter: the tests share the module-level
 `rsyscall.local_process`, whose state does not survive a test being killed by
 the timeout, so in a single process one hanging test would poison the rest.
+Tests also leave processes behind (they share the interpreter's memory and hold
+both ends of their syscall sockets), so `make baseline` and `make wheel-test`
+run each pytest in a session of its own and kill its whole process group
+afterwards (`scripts/pytest_session.py`).
 
 ## Licensing
 

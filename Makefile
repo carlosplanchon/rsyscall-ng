@@ -1,7 +1,7 @@
 SHELL := bash
 BACKEND ?= c
 export BACKEND
-.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-test clean-venv clean-reference clean-native clean-dist
+.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-manylinux wheel-test clean-venv clean-reference clean-native clean-dist
 
 help:
 	@echo "targets (BACKEND=c|rust selects the native implementation; default c):"
@@ -18,7 +18,8 @@ help:
 	@echo "  probe-diff       run the probes against both backends and diff the normalised output"
 	@echo "  spec-check       verify docs/spec: generated layouts and vectors are current, citations valid"
 	@echo "  wheel            build the wheel (bundles the Rust native side) into dist/"
-	@echo "  wheel-test       install the wheel into a throwaway venv and exercise it away from the source tree"
+	@echo "  wheel-manylinux  check the wheel with auditwheel and retag it as manylinux_2_17 (uvx: auditwheel + patchelf)"
+	@echo "  wheel-test       install the newest wheel into a throwaway venv and exercise it away from the source tree"
 	@echo "  clean-venv       remove both venvs and in-tree build artifacts"
 	@echo "  clean-reference  remove reference/ (oracle clone and build)"
 	@echo "  clean-native     remove native/prefix and native/target"
@@ -70,6 +71,9 @@ clean-reference:
 
 wheel:
 	rm -rf dist build && uv build --wheel --out-dir dist .
+
+wheel-manylinux:
+	uvx --with patchelf --from auditwheel auditwheel repair --plat manylinux_2_17_x86_64 -w dist dist/rsyscall_ng-*-linux_x86_64.whl && rm dist/rsyscall_ng-*-linux_x86_64.whl
 
 wheel-test:
 	scripts/wheel-test.sh

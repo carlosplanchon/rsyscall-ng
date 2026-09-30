@@ -78,6 +78,7 @@ From the repository root:
 | `make baseline BACKEND=rust && make baseline-diff` | the pytest suite, one interpreter per test, compared with the C baseline |
 | `make probe-diff` | the black-box probes of the helper executables against both backends, normalised and diffed (outputs under `reference/probe-compare/`) |
 | `python3 scripts/header-check.py` | checks `include/rsyscall.h` against the cffi cdef (35 offsets, 6 sizes, 5 prototypes) |
+| `make wheel && make wheel-test` | the repository's `setup.py` in its default, bundled mode: builds the crate, copies `librsyscall.so` and the three helpers into `python/rsyscall/_native/` and links the cffi module with an `$ORIGIN/_native` rpath; `wheel-test` installs the wheel into a throwaway venv and compares its test results with `tests/baseline-rust.txt` |
 
 Plain cargo equivalents (all with `--manifest-path native/Cargo.toml`):
 `cargo build --release -p rsyscall-native`, `cargo test -p rsyscall-core`,
