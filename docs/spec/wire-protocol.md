@@ -211,7 +211,7 @@ The client reads the server's memory by making the server send the bytes itself
 
 | step | direction | bytes | meaning |
 |---|---|---|---|
-| 1 | client to server | 56 | request `sendto(server_fd, src, len, 0, 0, 0)` (`python/rsyscall/tasks/connection.py:180`, `python/rsyscall/sys/socket.py:602-610`, `python/rsyscall/sys/socket.py:683-685`) |
+| 1 | client to server | 56 | request `sendto(server_fd, src, len, MSG_NOSIGNAL, 0, 0)` (`python/rsyscall/tasks/connection.py:180`, `python/rsyscall/sys/socket.py:602-610`, `python/rsyscall/sys/socket.py:683-685`) |
 | 2 | server to client | `len` | the memory contents, produced by the `sendto` itself (`python/rsyscall/tasks/connection.py:186-188`, `python/rsyscall/tasks/connection.py:243-253`) |
 | 3 | server to client | 8 | the `sendto` result, which MUST be `len` on success (`python/rsyscall/tasks/connection.py:181-182`) |
 

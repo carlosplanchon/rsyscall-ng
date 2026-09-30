@@ -177,7 +177,7 @@ class SyscallConnection(SyscallInterface):
             return t.cast(bytes, await self.request_queue.request(req))
 
     async def infallible_send(self, src: Pointer) -> None:
-        sent, remaining = await self.server_fd.send(to_span(src), MSG.NONE)
+        sent, remaining = await self.server_fd.send(to_span(src), MSG.NOSIGNAL)  # a stale send after a reconnect must fail with EPIPE, not kill the server
         if remaining.size() != 0:
             raise RuntimeError("somehow got a partial send, the syscall server will now be broken")
 
