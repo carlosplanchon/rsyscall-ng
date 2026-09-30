@@ -1,7 +1,7 @@
 # Release of rsyscall-ng to PyPI through trusted publishing: no API token is stored anywhere.
 #
-# Publishing a GitHub release whose tag is v<version> (the version in pyproject.toml), e.g.
-#   gh release create v0.1.0 --generate-notes
+# Pushing a tag v<version> (the version in pyproject.toml), e.g.
+#   git tag -a v0.1.0 -m "Release 0.1.0" && git push origin v0.1.0
 # runs the whole CI on the tagged commit (.github/workflows/ci.yml: the differential baseline,
 # the distributions and their tests), checks that the tag matches the version of the built
 # distributions, and then publishes exactly the distributions the CI built and tested. The
@@ -13,8 +13,8 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -43,7 +43,7 @@ jobs:
           path: dist
       - name: The tag must be v<version> and there must be one wheel and one sdist
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           shopt -s nullglob
           wheels=(dist/rsyscall_ng-*.whl)
