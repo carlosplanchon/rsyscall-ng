@@ -22,11 +22,11 @@ modules only; the helper tests joined on 2026-09-30, see below.)
 
 - `test_chroot.py::TestChroot::test_basic` (FAIL, `OSError: [Errno 22] Invalid argument`).
   Fails while bind-mounting `/proc` into a temporary directory inside a fresh user and
-  mount namespace (`Process.mount` -> `mount(2)` returns EINVAL). The cause on this host
-  has not been investigated; the compat patches are not involved (the failure is a
-  kernel return value). It is environment-dependent: the same test passes in an Ubuntu
-  24.04 container running on the very same kernel (the CI simulation), so the EINVAL comes
-  from this host's mount setup, not from the kernel or from rsyscall.
+  mount namespace (`Process.mount` -> `mount(2)` returns EINVAL). The cause has not been
+  investigated; the compat patches are not involved (the failure is a kernel return
+  value), and both backends behave identically. It fails the same way on the GitHub-hosted
+  Ubuntu 24.04 runners (kernel 6.17) and passes only inside a privileged Docker container
+  (the local CI simulation, on this host's kernel), whose own `/proc` mount differs.
 
 - `test_concurrency.py::TestConcurrency::test_nursery` (FAIL, `MyException: ha ha`).
   `sleep_and_throw()` raises `MyException` from inside its own nursery. Since trio 0.25
