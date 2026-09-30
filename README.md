@@ -1,5 +1,7 @@
 # rsyscall-ng
 
+![rsyscall-ng: process-independent Linux syscalls for Python](https://raw.githubusercontent.com/carlosplanchon/rsyscall-ng/main/assets/banner.jpg)
+
 A modernization of [rsyscall](https://github.com/catern/rsyscall), the
 process-independent, type-safe, low-level interface to Linux system calls for
 Python. In rsyscall every syscall is a method on a *process object*, which may
@@ -7,6 +9,13 @@ be the local interpreter, a child created with `clone`, or a process on a
 remote host; new processes start out sharing everything with their parent and
 are then shaped with ordinary syscalls (`unshare`, `execve`, ...) instead of
 `fork`/`posix_spawn`.
+
+[![CI](https://github.com/carlosplanchon/rsyscall-ng/actions/workflows/ci.yml/badge.svg)](https://github.com/carlosplanchon/rsyscall-ng/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/rsyscall-ng.svg)](https://pypi.org/project/rsyscall-ng/)
+[![Python versions](https://img.shields.io/pypi/pyversions/rsyscall-ng.svg)](https://pypi.org/project/rsyscall-ng/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/carlosplanchon/rsyscall-ng/blob/main/LICENSE)
+[![Platform: Linux x86_64](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](https://github.com/carlosplanchon/rsyscall-ng#quick-start)
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/carlosplanchon/rsyscall-ng)
 
 ## What it looks like
 
