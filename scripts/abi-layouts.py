@@ -46,6 +46,9 @@ PRELUDE = "typedef int pid_t;"
 CMSGHDR_MIRROR = "struct cmsghdr { size_t cmsg_len; int cmsg_level; int cmsg_type; };"
 SCALARS = ["int", "long", "size_t", "pid_t", "void *"]
 COMMAND = "python3 scripts/abi-layouts.py --write docs/spec/abi-layouts.generated.md"
+# The header names the cffi release that generated the file. Another release that computes the
+# same layouts is no reason to regenerate, so --check compares the texts without it.
+CFFI_VERSION_RE = re.compile(r"\(cffi [^)]*\)")
 
 STRUCT_RE = re.compile(r"struct\s+(\w+)\s*\{([^{}]*?)\};", re.S)
 
@@ -211,7 +214,7 @@ def main(argv: list[str]) -> int:
         if not path.exists():
             print(f"{path}: missing; run: {COMMAND}", file=sys.stderr)
             return 1
-        if path.read_text() != text:
+        if CFFI_VERSION_RE.sub("(cffi)", path.read_text()) != CFFI_VERSION_RE.sub("(cffi)", text):
             print(f"{path}: out of date; run: {COMMAND}", file=sys.stderr)
             return 1
         print(f"{path}: up to date")

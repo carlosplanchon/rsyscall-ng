@@ -62,7 +62,7 @@ probe-diff:
 	scripts/probe-compare.sh
 
 spec-check:
-	python3 scripts/abi-layouts.py --check docs/spec/abi-layouts.generated.md
+	source scripts/env.sh && "$$PY" scripts/abi-layouts.py --check docs/spec/abi-layouts.generated.md
 	source scripts/env.sh && "$$PY" scripts/spec-vectors.py --check docs/spec/vectors/v0.json
 	python3 scripts/spec-lint.py
 

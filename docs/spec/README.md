@@ -181,8 +181,9 @@ Two files are generated and never edited by hand:
   ` | `), `meaning`, `derived_from` (citations) and `generator`; the `clone_args` vector describes
   syscall arguments rather than bytes, so its `hex` is `null` and the values are under `json`.
 
-`make spec-check` runs `scripts/abi-layouts.py --check`, `scripts/spec-vectors.py --check` (with
-the venv python, so the client classes are consulted) and `scripts/spec-lint.py`.
+`make spec-check` runs `scripts/abi-layouts.py --check` and `scripts/spec-vectors.py --check` with
+the venv python (cffi, and the client classes for the vectors) and `scripts/spec-lint.py`. The
+layout check ignores the cffi release named in the generated file's header.
 
 ## 6. Index, reading order and open questions
 
