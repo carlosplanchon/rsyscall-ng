@@ -8,6 +8,53 @@ remote host; new processes start out sharing everything with their parent and
 are then shaped with ordinary syscalls (`unshare`, `execve`, ...) instead of
 `fork`/`posix_spawn`.
 
+## What it looks like
+
+A process object runs system calls in the process it stands for. Here that is a
+child of the interpreter:
+
+```python
+import trio
+from rsyscall import local_process
+
+async def main():
+    child = await local_process.fork()        # a new process, driven from this one
+    # write(2) runs in the child, on a buffer allocated in the child's memory
+    await child.stdout.write(await child.ptr(b"Hello from the child!\n"))
+    echo = await child.environ.which("echo")  # looked up on the child's PATH
+    await (await child.exec(echo.args("...now it is echo"))).check()  # execve(2), then wait
+
+trio.run(main)
+```
+
+The same kind of object can stand for a process on another machine. Below, the
+Python code runs here, while the process, its `fork` and its `execve` run on
+`worker`:
+
+```python
+import trio
+from rsyscall import local_process
+from rsyscall.tasks.ssh import make_ssh_host
+
+async def main():
+    host = await make_ssh_host(local_process, lambda ssh: ssh.args("worker"))
+    _, worker = await host.ssh(local_process)      # a process on worker, driven from here
+    child = await worker.fork()                     # the fork happens on worker
+    uname = await child.environ.which("uname")      # found on worker's PATH
+    await (await child.exec(uname.args("-n"))).check()  # prints worker's hostname
+
+trio.run(main)
+```
+
+`worker` is any x86_64 Linux machine you can reach with `ssh worker` that has a
+POSIX shell and GNU coreutils. Nothing has to be installed there: a small static
+bootstrap helper travels over the same ssh connection. The function passed to
+`make_ssh_host` extends the `ssh` command line, so ssh options such as a jump
+host or connection sharing can go there. `scripts/hello.py` is the first example
+with more output; `make hello` and the CI run it.
+
+## Relation to upstream
+
 Upstream has been dormant since 2022-07-25 and its PyPI package no longer
 installs. rsyscall-ng keeps the upstream Python API (imported with its full git
 history under `python/`) and brings it to current Python (>= 3.12) and trio.
