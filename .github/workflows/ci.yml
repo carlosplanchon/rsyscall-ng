@@ -12,7 +12,8 @@
 # The baselines are recorded on the runner. The committed ones describe the development machine
 # and a few tests depend on the environment, so differences from them are only warnings; the gate
 # is C against Rust on the same machine. Actions are pinned to commit SHAs, commented with the
-# release they correspond to.
+# release they correspond to. .github/workflows/release.yml calls this workflow on a release tag
+# and publishes the `dist` artifact it produces.
 name: CI
 
 on:
@@ -20,6 +21,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:  # from release.yml, on the release tag
   schedule:
     - cron: "23 4 * * 1"  # weekly: the Python dependencies are not pinned
 

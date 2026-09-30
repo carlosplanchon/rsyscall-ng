@@ -1,0 +1,81 @@
+# Release of rsyscall-ng to PyPI through trusted publishing: no API token is stored anywhere.
+#
+# Publishing a GitHub release whose tag is v<version> (the version in pyproject.toml), e.g.
+#   gh release create v0.1.0 --generate-notes
+# runs the whole CI on the tagged commit (.github/workflows/ci.yml: the differential baseline,
+# the distributions and their tests), checks that the tag matches the version of the built
+# distributions, and then publishes exactly the distributions the CI built and tested. The
+# publish job runs in the `pypi` environment, which asks for a maintainer's approval first.
+#
+# PyPI trusts this file, release.yml, together with the `pypi` environment. The publish job has to
+# stay in this file: PyPI does not accept a reusable workflow as the trusted one.
+# Actions are pinned to commit SHAs, commented with the release they correspond to.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ci:
+    name: CI on the release tag
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  check:
+    name: Check the distributions against the release tag
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Download the distributions built and tested by the CI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: The tag must be v<version> and there must be one wheel and one sdist
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          shopt -s nullglob
+          wheels=(dist/rsyscall_ng-*.whl)
+          sdists=(dist/rsyscall_ng-*.tar.gz)
+          ls -l dist
+          if [ "${#wheels[@]}" -ne 1 ] || [ "${#sdists[@]}" -ne 1 ]; then
+            echo "::error::expected one wheel and one sdist, found ${#wheels[@]} and ${#sdists[@]}"
+            exit 1
+          fi
+          version=${sdists[0]#dist/rsyscall_ng-}
+          version=${version%.tar.gz}
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::the release tag $TAG does not match the package version $version (expected v$version)"
+            exit 1
+          fi
+          echo "releasing rsyscall-ng $version"
+
+  publish:
+    name: Publish to PyPI
+    needs: [ci, check]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rsyscall-ng/
+    permissions:
+      id-token: write  # trusted publishing: the job proves its identity to PyPI with a GitHub OIDC token
+    steps:
+      - name: Download the distributions built and tested by the CI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: Publish to PyPI, with PEP 740 attestations
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
