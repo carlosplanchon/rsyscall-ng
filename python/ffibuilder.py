@@ -780,7 +780,7 @@ struct fuse_in_header {
     uint32_t uid;       /* UID of the requesting process */
     uint32_t gid;       /* GID of the requesting process */
     uint32_t pid;       /* PID of the requesting process */
-    uint32_t padding;
+    uint16_t total_extlen; uint16_t padding;  /* FUSE 7.38+: was uint32_t padding */
 };
 
 struct fuse_out_header {
