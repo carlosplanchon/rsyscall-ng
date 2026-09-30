@@ -38,7 +38,10 @@ reimplemented in Rust under `native/`, clean-room from the specification in
       take them from `rsyscall._native` and OpenSSH from `PATH`; `test_stub`,
       `test_stdinboot`, `test_persistent` and `test_ssh` are in the baseline, so the
       differential test covers the helper executables
-- [ ] CI, aarch64 (later phases)
+- [x] continuous integration on GitHub-hosted Ubuntu 24.04 runners: crate
+      tests, the differential C-vs-Rust baseline recorded on the runner, and the
+      wheel and the sdist tested on CPython 3.12 to 3.14
+- [ ] aarch64 (later phase)
 
 ## Layout
 
@@ -47,7 +50,8 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 | `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`, `rsysapps`) |
 | `pyproject.toml`, `setup.py`, `MANIFEST.in` | PEP 517 packaging of `python/` (setuptools + cffi); `setup.py` builds `native/` with cargo and bundles its artefacts |
 | `python/rsyscall/_native/` | `rsyscall._native`: where the bundled `librsyscall.so` and helper executables live, and how to find them |
-| `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes |
+| `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes, CI runner setup |
+| `.github/workflows/ci.yml` | the CI workflow, described under "Continuous integration" |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
 | `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
 | `native/`                  | clean-room Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
@@ -60,7 +64,7 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 ## Quick start
 
 Requirements: Linux x86_64, git, [uv](https://docs.astral.sh/uv/), a C compiler
-(for the cffi extension), Rust 1.85+ with cargo (`native/` uses edition 2024)
+(for the cffi extension), Rust 1.88 or newer with cargo (`native/` uses naked functions)
 and, for the C oracle only, autotools, libtool, pkg-config and the Linux kernel
 headers.
 
@@ -113,8 +117,10 @@ make sdist-test         # unpack it outside the repository, build a wheel as pip
 The wheel is tagged `cp312-abi3`: the cffi extension uses only the stable ABI
 (`abi3audit` finds no violation), so one wheel serves every CPython from 3.12 on.
 Both the wheel and a wheel built from the sdist give the recorded baseline's
-per-test results on 3.12, 3.13 and 3.14. Building from the sdist needs cargo
-(Rust 1.85+) and a C compiler on the installing machine.
+per-test results on 3.12, 3.13 and 3.14. Building from the sdist needs, on the
+installing machine, cargo with Rust 1.88 or newer (the first release with naked
+functions; 1.87 fails), a C compiler and the Python headers (`python3-dev` on
+Debian and Ubuntu).
 
 `rsyscall._native.helper(name)` returns the path of a bundled helper executable
 (or of the one under `RSYSCALL_LIBEXEC_DIR`, when set) and `library_path()` the
@@ -144,6 +150,27 @@ Tests also leave processes behind (they share the interpreter's memory and hold
 both ends of their syscall sockets), so `make baseline` and `make wheel-test`
 run each pytest in a session of its own and kill its whole process group
 afterwards (`scripts/pytest_session.py`).
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests, weekly
+and on demand, on GitHub-hosted Ubuntu 24.04 runners. `scripts/ci-setup.sh`
+installs autotools and the OpenSSH server and lifts Ubuntu's AppArmor
+restriction on unprivileged user namespaces, which the test-suite creates.
+
+- **differential** runs the crate tests, builds the Rust native side with its
+  ELF checks and the C oracle, runs the specification checks and the smoke
+  tests, and records both baselines on the runner. It fails unless the two are
+  identical. Differences from the committed baselines are only warnings,
+  because a few tests depend on the machine; the recorded baselines and the
+  per-test logs are uploaded as artifacts.
+- **dist** builds the manylinux abi3 wheel, checked by auditwheel and
+  abi3audit, and the sdist, and uploads them as the `dist` artifact.
+- **test-dist** installs the wheel on CPython 3.12, 3.13 and 3.14, and a wheel
+  built from the sdist, and compares each one's per-test results with the Rust
+  baseline recorded by the differential job.
+
+Actions are pinned to commit SHAs, with the release named in a comment.
 
 ## Licensing
 

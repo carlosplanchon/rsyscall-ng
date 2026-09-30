@@ -33,6 +33,8 @@ def run(args: list[str], log: Path | str, env: dict[str, str] | None = None, cwd
         os.killpg(proc.pid, signal.SIGKILL)
     except ProcessLookupError:
         pass  # nothing was left behind
+    except PermissionError:
+        pass  # only processes we may not signal are left, e.g. a command a test ran under sudo
     return status
 
 if __name__ == "__main__":

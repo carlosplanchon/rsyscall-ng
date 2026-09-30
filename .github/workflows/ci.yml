@@ -1,0 +1,179 @@
+# Continuous integration of rsyscall-ng on GitHub-hosted Ubuntu 24.04 runners.
+#
+#   differential  Builds and checks the Rust native side (crate tests, ELF checks) and the upstream
+#                 C oracle, records the test-suite's per-test baseline against each backend and
+#                 requires the two to be identical: the differential test behind the clean-room
+#                 reimplementation (tests/baseline-notes.md).
+#   dist          Builds the abi3 manylinux wheel (auditwheel, abi3audit) and the sdist.
+#   test-dist     Installs the wheel on CPython 3.12, 3.13 and 3.14, and a wheel built from the
+#                 sdist the way pip would, and compares their per-test results with the Rust
+#                 baseline recorded on the runner.
+#
+# The baselines are recorded on the runner. The committed ones describe the development machine
+# and a few tests depend on the environment, so differences from them are only warnings; the gate
+# is C against Rust on the same machine. Actions are pinned to commit SHAs, commented with the
+# release they correspond to.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"  # weekly: the Python dependencies are not pinned
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  differential:
+    name: Differential baseline, C oracle vs Rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Prepare the runner
+        run: scripts/ci-setup.sh
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - name: Crate tests
+        run: make native-test
+      - name: Rust native side (build, install into native/prefix, ELF checks)
+        run: make native
+      - name: C oracle (upstream at the pinned commit, into reference/prefix)
+        run: make oracle
+      - name: Virtual environments, one per backend
+        run: |
+          make venv
+          make venv BACKEND=rust
+      - name: Specification and header checks
+        run: |
+          make spec-check
+          python3 scripts/header-check.py
+      - name: Smoke tests
+        run: |
+          make hello
+          make hello BACKEND=rust
+      - name: Baselines, one interpreter per test
+        run: |
+          RSYSCALL_BASELINE_LOGS="$PWD/ci-logs/c" make baseline
+          RSYSCALL_BASELINE_LOGS="$PWD/ci-logs/rust" make baseline BACKEND=rust
+          cp tests/baseline-c.txt tests/baseline-rust.txt ci-logs/
+      - name: The C and Rust baselines must be identical
+        run: make baseline-diff
+      - name: Compare with the committed baselines (warnings only)
+        run: |
+          for b in c rust; do
+            git show "HEAD:tests/baseline-$b.txt" > "ci-logs/committed-baseline-$b.txt"
+            python3 scripts/baseline-compare.py "ci-logs/committed-baseline-$b.txt" "tests/baseline-$b.txt" ||
+              echo "::warning title=tests/baseline-$b.txt::the runner's results differ from the committed baseline; see this step's log"
+          done
+      - name: Upload the baselines for the distribution tests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baselines
+          path: |
+            tests/baseline-c.txt
+            tests/baseline-rust.txt
+          if-no-files-found: error
+      - name: Upload the per-test logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baseline-logs
+          path: ci-logs/
+          if-no-files-found: ignore
+
+  dist:
+    name: Build the wheel and the sdist
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+          python-version: "3.14"
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - name: Wheel, checked by auditwheel and abi3audit and retagged manylinux_2_17
+        run: |
+          make wheel
+          make wheel-manylinux
+      - name: Source distribution
+        run: make sdist
+      - name: Upload the distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  test-dist:
+    name: Test the ${{ matrix.dist }} on CPython ${{ matrix.python }}
+    needs: [differential, dist]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { dist: wheel, python: "3.12" }
+          - { dist: wheel, python: "3.13" }
+          - { dist: wheel, python: "3.14" }
+          - { dist: sdist, python: "3.12" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+      - name: Prepare the runner
+        run: scripts/ci-setup.sh
+      - name: Rust toolchain (building from the sdist runs cargo)
+        if: matrix.dist == 'sdist'
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - name: Download the distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: Download the baselines recorded by the differential job
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: baselines
+          path: tests
+      - name: Install, exercise and compare with tests/baseline-rust.txt
+        env:
+          RSYSCALL_WHEEL_PYTHON: ${{ matrix.python }}
+          DIST_KIND: ${{ matrix.dist }}
+        run: |
+          case "$DIST_KIND" in
+            wheel) scripts/wheel-test.sh dist/*.whl ;;
+            sdist) scripts/wheel-test.sh dist/*.tar.gz ;;
+          esac

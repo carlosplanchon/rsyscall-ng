@@ -25,7 +25,9 @@ case "$DIST" in
         echo "== $DIST"
         echo "   unpacked in $SRC; building a wheel with CPython $PYVER in an isolated environment"
         start=$SECONDS
-        (cd "$SRC" && clean uv build --quiet --wheel --python "$PYVER" --out-dir "$BUILD/wheel" .)
+        # --managed-python: a uv-managed interpreter ships its headers, where a distribution's
+        # python3 may lack them (python3-dev); the resulting abi3 wheel serves either.
+        (cd "$SRC" && clean uv build --quiet --wheel --managed-python --python "$PYVER" --out-dir "$BUILD/wheel" .)
         echo "   built in $((SECONDS - start)) s; cargo ran in the unpacked tree:" \
              "$(ls "$SRC/native/target/release" | grep -c -E '^(librsyscall\.so|rsyscall-(bootstrap|stdin-bootstrap|unix-stub))$')/4 artefacts in native/target/release"
         WHEEL=$(ls "$BUILD"/wheel/rsyscall_ng-*.whl) ;;
