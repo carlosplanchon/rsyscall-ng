@@ -4,7 +4,9 @@ Why one process per test: the tests share the module-level ``rsyscall.local_proc
 whose trio/dneio state does not survive a test being interrupted, e.g. by
 pytest-timeout. In a single pytest process one hanging test poisons everything that
 runs after it with ``RuntimeError: Attempted to call run() from inside a run()``.
-Isolation makes every line of the baseline independent of the others.
+Isolation makes every line of the baseline independent of the others. Each pytest runs
+in a session of its own and the processes it leaves behind are killed afterwards
+(see pytest_session.py).
 
 Usage: baseline.py [pytest selection args...]      e.g. ``-k socket`` or a test file
 Environment:
@@ -18,9 +20,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+import pytest_session  # scripts/ is sys.path[0] when this file is run as a script
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.environ.get("BASELINE_OUT", ROOT / "tests" / "baseline-c.txt"))
@@ -33,13 +36,7 @@ NODE_ID = re.compile(r"\S+::\S+")
 
 def run_pytest(args: list[str], part: Path, log: Path) -> int:
     env = dict(os.environ, RSYSCALL_BASELINE_OUT=str(part), RSYSCALL_BACKEND=BACKEND)
-    # setsid: no controlling tty, so nothing can block on a prompt (sudo in test_setuid).
-    cmd = ["setsid", "--wait", sys.executable, "-m", "pytest", "-p", "no:cacheprovider",
-           "--tb=short", f"--timeout={TIMEOUT}", *args]
-    with log.open("w") as f:
-        f.write(" ".join(cmd) + "\n\n")
-        f.flush()
-        return subprocess.run(cmd, cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT).returncode
+    return pytest_session.run(["--tb=short", f"--timeout={TIMEOUT}", *args], log, env=env, cwd=ROOT)
 
 def read_part(part: Path) -> tuple[str | None, dict[str, str]]:
     "Return (versions header line, {nodeid[  # exc]: STATUS}) from a part file"

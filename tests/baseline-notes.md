@@ -67,11 +67,19 @@ The tests share the module-level `rsyscall.local_process`, whose trio guest run 
 about a minute of interpreter start-up over the whole suite and makes each baseline line
 independent of the others.
 
+Tests also leave processes behind: the processes they create share the interpreter's
+memory and hold both ends of their syscall sockets, so they never see EOF and outlive
+pytest (a whole-suite run leaves dozens, each keeping the inherited stdout open, which
+makes a `make ... | tail` wait forever). `scripts/pytest_session.py` therefore starts each
+pytest as the leader of a new session, logs its output to a file and kills the whole
+process group once it has exited; `make baseline` and `make wheel-test` go through it.
+
 ## Other observations
 
 - `python/rsyscall/unistd/exec.py::_execveat` references `AT.FDCWD` without importing
   `AT` (upstream bug, unreachable in the suite; left untouched).
-- `rsyscall.linux.netlink` / `rtnetlink` import `pyroute2`, which `setup.py` does not
-  declare; only the optional `test_net.py` notices.
+- `rsyscall.linux.netlink` / `rtnetlink` import `pyroute2`, which the upstream `setup.py`
+  did not declare; only the optional `test_net.py` notices. The repository's
+  `pyproject.toml` declares it as the optional extra `net`.
 - Collection yields 71 tests, not the 69 `def test_` functions in the core modules,
   because `test_clone.py` defines two classes that inherit the same test methods.
