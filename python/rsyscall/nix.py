@@ -22,8 +22,8 @@ from rsyscall.command import Command
 import trio
 import struct
 from dataclasses import dataclass
-import nixdeps
-from nixdeps import PackageClosure
+if t.TYPE_CHECKING:  # the nixdeps build hook is only needed for the PackageClosure annotations below
+    from nixdeps import PackageClosure
 import logging
 from rsyscall.handle import WrittenPointer, Pointer, FileDescriptor
 from rsyscall.path import Path

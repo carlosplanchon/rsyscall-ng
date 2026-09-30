@@ -4,8 +4,8 @@ from rsyscall import AsyncChildPid, Process
 from rsyscall.tests.trio_test_case import TrioTestCase
 import rsyscall.thread
 from rsyscall.nix import enter_nix_container, deploy
-import rsyscall._nixdeps.nix
-import rsyscall._nixdeps.coreutils
+import importlib.util
+import unittest
 from rsyscall.tasks.ssh import *
 
 from rsyscall.unistd import SEEK
@@ -68,12 +68,12 @@ class TestSSH(TrioTestCase):
         self.assertEqual(data, await read_data.read())
 
     async def test_exec_true(self) -> None:
-        true = (await deploy(self.process, rsyscall._nixdeps.coreutils.closure)).bin('true')
+        true = await self.process.environ.which('true')
         await self.remote.run(true)
 
     async def test_exec_pipe(self) -> None:
         [(local_sock, remote_sock)] = await self.remote.open_channels(1)
-        cat = (await deploy(self.process, rsyscall._nixdeps.coreutils.closure)).bin('cat')
+        cat = await self.process.environ.which('cat')
         process = await self.remote.fork()
         cat_side = process.task.inherit_fd(remote_sock)
         await remote_sock.close()
@@ -97,7 +97,7 @@ class TestSSH(TrioTestCase):
         await local_child.kill()
 
     async def test_copy(self) -> None:
-        cat = (await deploy(self.process, rsyscall._nixdeps.coreutils.closure)).bin('cat')
+        cat = await self.process.environ.which('cat')
 
         local_file = await self.process.task.memfd_create(await self.process.ptr("source"))
         remote_file = await self.remote.task.memfd_create(await self.remote.ptr("dest"))
@@ -130,7 +130,9 @@ class TestSSH(TrioTestCase):
                                            await self.remote.task.malloc(Sigset))
         await self.remote.task.read_oldset_and_check()
 
+    @unittest.skipIf(importlib.util.find_spec("rsyscall._nixdeps") is None, "needs a Nix store (rsyscall._nixdeps)")
     async def test_nix_deploy(self) -> None:
+        import rsyscall._nixdeps.nix, rsyscall._nixdeps.coreutils
         # make it locally so that it can be cleaned up even when the
         # remote enters the container
         tmpdir = await mkdtemp(self.process)

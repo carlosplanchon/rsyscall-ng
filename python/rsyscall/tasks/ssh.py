@@ -6,7 +6,7 @@ including through an ssh process.
 from __future__ import annotations
 from dataclasses import dataclass
 from rsyscall.command import Command
-from rsyscall.environ import Environment
+from rsyscall.environ import Environment, ExecutableNotFound, ExecutablePathCache
 from rsyscall.epoller import Epoller, AsyncFileDescriptor, AsyncReadBuffer
 from rsyscall.handle import WrittenPointer, FileDescriptor, Task
 from rsyscall.thread import Process
@@ -26,7 +26,7 @@ import rsyscall.far as far
 import rsyscall.handle as handle
 import rsyscall.memory.allocator as memory
 import rsyscall.near.types as near
-import rsyscall.nix as nix
+import rsyscall._native as native
 import string
 import typing as t
 
@@ -96,13 +96,13 @@ class SSHExecutables:
     bootstrap_path: Path
 
     @classmethod
-    async def with_nix(cls, process: Process) -> SSHExecutables:
-        import rsyscall._nixdeps.openssh
-        import rsyscall._nixdeps.librsyscall
-        ssh_path = await nix.deploy(process, rsyscall._nixdeps.openssh.closure)
-        rsyscall_path = await nix.deploy(process, rsyscall._nixdeps.librsyscall.closure)
-        base_ssh = SSHCommand.make(ssh_path/"bin"/"ssh")
-        bootstrap_path = rsyscall_path/"libexec"/"rsyscall"/"rsyscall-bootstrap"
+    async def find(cls, process: Process) -> SSHExecutables:
+        "Look up `ssh` on the process's PATH and take `rsyscall-bootstrap` from this package (`with_nix` is the old name)"
+        ssh = await process.environ.which("ssh")
+        # The helper is opened by `process` and streamed to the remote host on ssh's stdin (SSHHost.ssh,
+        # ssh_bootstrap.sh), so only this side needs it: the bundled copy, or RSYSCALL_LIBEXEC_DIR's.
+        base_ssh = SSHCommand.make(ssh.executable_path)
+        bootstrap_path = Path(native.helper("rsyscall-bootstrap"))
         return SSHExecutables(base_ssh, bootstrap_path)
 
     def host(self, to_host: t.Callable[[SSHCommand], SSHCommand]) -> SSHHost:
@@ -321,11 +321,11 @@ class SSHDExecutables:
     sshd: SSHDCommand
 
     @classmethod
-    async def with_nix(cls, process: Process) -> SSHDExecutables:
-        import rsyscall._nixdeps.openssh
-        ssh_path = await nix.deploy(process, rsyscall._nixdeps.openssh.closure)
-        ssh_keygen = ssh_path.bin('ssh-keygen')
-        sshd = SSHDCommand.make(ssh_path/"bin"/"sshd")
+    async def find(cls, process: Process) -> SSHDExecutables:
+        "Look up `ssh-keygen` on the process's PATH and `sshd` on PATH or in `SBIN_DIRS` (`with_nix` is the old name)"
+        ssh_keygen = await process.environ.which('ssh-keygen')
+        sshd_path = (await which_with_sbin(process, 'sshd')).executable_path
+        sshd = SSHDCommand.make(sshd_path)
         return SSHDExecutables(ssh_keygen, sshd)
 
 async def make_local_ssh_from_executables(process: Process,
@@ -371,12 +371,26 @@ async def make_local_ssh_from_executables(process: Process,
 
 # Helpers
 async def make_ssh_host(process: Process, to_host: t.Callable[[SSHCommand], SSHCommand]) -> SSHHost:
-    ssh = await SSHExecutables.with_nix(process)
+    ssh = await SSHExecutables.find(process)
     return ssh.host(to_host)
 
 async def make_local_ssh(process: Process) -> SSHHost:
     "Look up the ssh executables and return an SSHHost which sshs to localhost; useful for testing"
-    ssh = await SSHExecutables.with_nix(process)
-    sshd = await SSHDExecutables.with_nix(process)
+    ssh = await SSHExecutables.find(process)
+    sshd = await SSHDExecutables.find(process)
     return (await make_local_ssh_from_executables(process, ssh, sshd))
 
+# Where distributions keep sshd (Debian: /usr/sbin only); a user's PATH often lacks these, so
+# `SSHDExecutables.find` searches them after PATH.
+SBIN_DIRS = [Path("/usr/sbin"), Path("/usr/local/sbin"), Path("/sbin")]
+
+async def which_with_sbin(process: Process, name: str) -> Command:
+    "Locate `name` on the process's PATH, then in `SBIN_DIRS`; throw `ExecutableNotFound` on failure"
+    try:
+        return await process.environ.which(name)
+    except ExecutableNotFound:
+        return await ExecutablePathCache(process.task, SBIN_DIRS).which(name)
+
+# Historical spellings, from when the executables were deployed from Nix closures (rsyscall._nixdeps).
+SSHExecutables.with_nix = SSHExecutables.find  # type: ignore[attr-defined]
+SSHDExecutables.with_nix = SSHDExecutables.find  # type: ignore[attr-defined]

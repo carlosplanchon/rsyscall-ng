@@ -5,14 +5,16 @@ every collected test in its own interpreter and merges the results. It describes
 upstream Python code does today against the unmodified upstream C library; it is not a
 list of things that are supposed to pass. Never edit it by hand.
 
-Recorded on 2026-09-28 with Python 3.14.7, trio 0.34.0, pytest 9.1.1, cffi 2.1.1, outcome
-1.3.0, on Linux 7.2.4-arch1-2 x86_64 as an unprivileged user with unprivileged user
-namespaces enabled. Two consecutive runs were byte-identical.
+Recorded on 2026-09-30 with Python 3.14.7, trio 0.34.0, pytest 9.1.1, cffi 2.1.1, outcome
+1.3.0, OpenSSH 10.5p1, on Linux 7.2.4-arch1-2 x86_64 as an unprivileged user with unprivileged
+user namespaces enabled and `/dev/fuse` world-accessible. The C and the Rust recordings are
+identical apart from the header's backend field. (First recorded on 2026-09-28 with the core
+modules only; the helper tests joined on 2026-09-30, see below.)
 
 | Status | Count |
 |--------|-------|
-| PASS   | 67    |
-| SKIP   | 1     |
+| PASS   | 91    |
+| SKIP   | 2     |
 | FAIL   | 2     |
 | ERROR  | 1     |
 
@@ -46,16 +48,21 @@ namespaces enabled. Two consecutive runs were byte-identical.
 - `test_ip.py::TestIP::test_send_is_not_atomic` (SKIP): skipped by upstream with
   `@unittest.skip("This test is slow and non-deterministic")`.
 
+- `test_ssh.py::TestSSH::test_nix_deploy` (SKIP): needs the Nix closures of the upstream
+  `nixdeps` build (`rsyscall._nixdeps`), which this tree does not have.
+
 ## Modules excluded from the baseline
 
-Seven modules are ignored at collection time unless `RSYSCALL_TEST_OPTIONAL=1` is set
-(see `python/rsyscall/tests/conftest.py`): `test_fuse.py`, `test_net.py`, `test_nix.py`,
-`test_persistent.py`, `test_ssh.py`, `test_stdinboot.py`, `test_stub.py`. Six of them
-import `rsyscall.nix`, directly or through `rsyscall.tasks.{ssh,stub,stdin_bootstrap}`,
-and `rsyscall.nix` imports the upstream `nixdeps` build hook at module level;
-`test_net.py` needs `pyroute2`, `/dev/net/tun` and CAP_NET_ADMIN. Decoupling the
-bootstrap helpers from Nix is planned; `test_stdinboot`, `test_stub` and
-`test_persistent` should rejoin the core set at that point.
+Modules are ignored at collection time only when what they need is missing on the
+recording machine (`OPTIONAL_MODULES` in `python/rsyscall/tests/conftest.py`); the fourth
+header line of each baseline records which ones and why. Here: `test_nix.py` (needs a Nix
+store; never collected without `RSYSCALL_TEST_OPTIONAL=1`) and `test_net.py` (`pyroute2` is
+not installed in the venvs). `test_stub.py`, `test_stdinboot.py`, `test_persistent.py` and
+`test_ssh.py` exercise the three helper executables and the persistent server through
+`rsyscall._native` (the backend's `RSYSCALL_LIBEXEC_DIR`) and the system OpenSSH (`ssh`,
+`sshd -i` as a `ProxyCommand`, `ssh-keygen`; no listening sshd is needed);
+`test_ssh.py::TestSSH::test_nix_deploy` skips without `rsyscall._nixdeps`. `test_fuse.py` is
+collected wherever `/dev/fuse` is readable and writable.
 
 ## Why one interpreter per test
 
@@ -65,7 +72,12 @@ The first whole-suite run in a single pytest process recorded 17 spurious failur
 The tests share the module-level `rsyscall.local_process`, whose trio guest run and
 `dneio` continuations do not survive a test being killed mid-run. Per-test isolation costs
 about a minute of interpreter start-up over the whole suite and makes each baseline line
-independent of the others.
+independent of the others. A second reason surfaced when the helper tests joined: in one
+interpreter, `test_setuid.py::TestSetuid::test_getdent_proc_pid_fd_after_setuid` fails once
+enough earlier tests have left file descriptors open in the shared local process (it expects
+the memfd's entry within the first `getdents` batch of `/proc/<pid>/fd`), while it passes on
+its own; `make wheel-test` therefore records the installed package the same way, one
+interpreter per test, before comparing with `tests/baseline-rust.txt`.
 
 Tests also leave processes behind: the processes they create share the interpreter's
 memory and hold both ends of their syscall sockets, so they never see EOF and outlive
@@ -81,5 +93,22 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
 - `rsyscall.linux.netlink` / `rtnetlink` import `pyroute2`, which the upstream `setup.py`
   did not declare; only the optional `test_net.py` notices. The repository's
   `pyproject.toml` declares it as the optional extra `net`.
-- Collection yields 71 tests, not the 69 `def test_` functions in the core modules,
-  because `test_clone.py` defines two classes that inherit the same test methods.
+- `test_fuse.py` failed with `ffi.error: struct fuse_in_header: wrong size for field
+  'padding'` on current kernels: FUSE 7.38 split the trailing `uint32_t padding` into
+  `uint16_t total_extlen; uint16_t padding`, and cffi's API mode checks the cdef against the
+  compiler's layout at first use. The cdef in `python/ffibuilder.py` now matches (same line,
+  the file's line numbers are cited by `docs/spec`); `FuseInHeader` never read the field.
+- `test_persistent.py::TestPersistent::test_ssh_same` and `test_ssh_new` failed with the Rust
+  helpers only, deterministically, with `SyscallHangup`: after `reconnect()` the client re-sends
+  a memory read whose remote `sendto` still names the old, shut-down socket, expecting `EPIPE`
+  (`python/rsyscall/tasks/persistent.py:238-260`); requested with flags `0`, that `sendto`
+  raised `SIGPIPE` in the persistent process, which dies unless it inherited CPython's
+  `SIG_IGN`. A process bootstrapped by a helper executable has the default disposition (both
+  the C and the Rust helpers leave it alone), so the C oracle would die the same way; it passed
+  only because its client happened to be at another phase of the epoll loop when it shut the
+  connection down. `SyscallConnection.infallible_send` now requests the `sendto` with
+  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`), which servers execute verbatim.
+- Collection yields 96 tests on this machine: 71 from the core modules (69 `def test_`
+  functions, plus two because `test_clone.py` defines two classes that inherit the same test
+  methods) and 25 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
+  `test_ssh.py` (9) and `test_fuse.py` (2).

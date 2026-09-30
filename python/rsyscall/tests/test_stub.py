@@ -3,7 +3,7 @@ from __future__ import annotations
 from rsyscall.tests.trio_test_case import TrioTestCase
 from rsyscall.tasks.stub import *
 
-import rsyscall.nix as nix
+# the stub executable comes from rsyscall._native (bundled, or RSYSCALL_LIBEXEC_DIR); no Nix store is needed
 
 from rsyscall.tests.utils import do_async_things
 from rsyscall.command import Command

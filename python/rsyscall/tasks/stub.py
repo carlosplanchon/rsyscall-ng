@@ -4,8 +4,8 @@ We create a StubServer, which listens on a Unix socket.
 
 Then we arrange for other programs to launch rsyscall-unix-stub,
 under an arbitrary executable name and with arbitrary arguments,
-either with the RSYSCALL_UNIX_STUB_SOCK environment variable set or
-through a wrapper shell script which sets RSYSCALL_UNIX_STUB_SOCK.
+either with the RSYSCALL_UNIX_STUB_SOCK_PATH environment variable set or
+through a wrapper shell script which sets RSYSCALL_UNIX_STUB_SOCK_PATH.
 
 rsyscall-unix-stub will connect back to us over the Unix socket, and
 we can call accept() to get a Process which controls the
@@ -40,11 +40,11 @@ import rsyscall.handle as handle
 from rsyscall.thread import Process
 from rsyscall.tasks.connection import SyscallConnection
 from rsyscall.loader import NativeLoader
-import trio
+import shlex
 from dataclasses import dataclass
 import logging
 import rsyscall.memory.allocator as memory
-import rsyscall.nix as nix
+import rsyscall._native as native
 from rsyscall.epoller import Epoller, AsyncFileDescriptor, AsyncReadBuffer
 from rsyscall.monitor import ChildPidMonitor
 from rsyscall.command import Command
@@ -86,16 +86,16 @@ class StubServer:
     @classmethod
     async def make(cls, process: Process, dir: Path, name: str) -> StubServer:
         "In the passed-in dir, make a listening stub server and an executable to connect to it."
-        import rsyscall._nixdeps.librsyscall
-        rsyscall_path = await nix.deploy(process, rsyscall._nixdeps.librsyscall.closure)
-        stub_path = rsyscall_path/"libexec"/"rsyscall"/"rsyscall-unix-stub"
+        # The stub comes from this package (rsyscall._native: the bundled copy, or RSYSCALL_LIBEXEC_DIR);
+        # the wrapper execs it by absolute path, so `process` must share this interpreter's filesystem.
+        stub_path = Path(native.helper("rsyscall-unix-stub"))
         sock_path = dir/f'{name}.sock'
         server = await StubServer.listen_on(process, sock_path)
         # there's no POSIX sh way to set $0, so we'll pass $0 as $1, $1 as $2, etc.
         # $0 will be the stub executable, so we'll need to drop $0 in StubServer.
         wrapper = """#!/bin/sh
 RSYSCALL_UNIX_STUB_SOCK_PATH={sock} exec {bin} "$0" "$@"
-""".format(sock=os.fsdecode(sock_path), bin=os.fsdecode(stub_path))
+""".format(sock=shlex.quote(os.fsdecode(sock_path)), bin=shlex.quote(os.fsdecode(stub_path)))
         await process.spit(dir/name, wrapper, mode=0o755)
         return server
 

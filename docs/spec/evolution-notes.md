@@ -76,20 +76,30 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
 - `read_length_prefixed_string` swallows an `EOFError` raised while reading the bytes of a string:
   the `except` block sets the message but does not re-raise (`python/rsyscall/epoller.py:772-776`).
   A truncated describe therefore surfaces as a confusing later error instead of an `EOFError`.
-- The `stub.py` module docstring names the environment variable `RSYSCALL_UNIX_STUB_SOCK`
-  (`python/rsyscall/tasks/stub.py:7-8`) while the code sets `RSYSCALL_UNIX_STUB_SOCK_PATH`
-  (`python/rsyscall/tasks/stub.py:97`).
+- The `stub.py` module docstring used to name the environment variable `RSYSCALL_UNIX_STUB_SOCK`
+  while the code sets `RSYSCALL_UNIX_STUB_SOCK_PATH` (`python/rsyscall/tasks/stub.py:97`); the
+  docstring now names the same variable (`python/rsyscall/tasks/stub.py:7-8`).
 - The comment "Connect to local socket 4 times" (`python/rsyscall/tasks/ssh.py:256`) is stale;
   the code connects twice.
+- `PersistentSyscallConnection.read` relies on a stale `infallible_send`, issued on the connection
+  that was just shut down, failing with `EPIPE` after a reconnection (`python/rsyscall/tasks/persistent.py:238-260`).
+  Upstream requested that `sendto` with flags `0`, which kills a persistent process that has the
+  default `SIGPIPE` disposition, i.e. one bootstrapped by a helper executable rather than cloned
+  from CPython (which ignores `SIGPIPE`); `test_persistent.py::test_ssh_same` showed it with the Rust
+  helpers and would with the C ones under the same timing. The client now requests it with
+  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`, `wire-protocol.md` §7); servers execute
+  the flags verbatim, so the wire format is unchanged.
 - `futex_memfd` is passed by the stub client and reported by two describe structs but never used
   (`python/rsyscall/tasks/stub.py:182-183`); dropping it (or defining what the memfd is for) would
   simplify the handshakes.
 - No client path starts an `rsyscall-server` executable, although the oracle build checks for
   one (`scripts/oracle-build.sh`); the Rust implementation does not need to ship it.
-- The helper executables are located through `rsyscall._nixdeps.librsyscall`
-  (`python/rsyscall/tasks/ssh.py:101`, `python/rsyscall/tasks/stdin_bootstrap.py:52`,
-  `python/rsyscall/tasks/stub.py:89`) via `rsyscall.nix`, which imports the `nixdeps` build hook at
-  module level (`python/rsyscall/nix.py:25`). Decoupling the path lookup from Nix would let the
+- The helper executables were located through `rsyscall._nixdeps.librsyscall` via `rsyscall.nix`,
+  which imported the `nixdeps` build hook at module level. They now come from `rsyscall._native`
+  (the bundled copies, or `RSYSCALL_LIBEXEC_DIR`; `python/rsyscall/tasks/ssh.py:105`,
+  `python/rsyscall/tasks/stdin_bootstrap.py:54`, `python/rsyscall/tasks/stub.py:91`), OpenSSH from
+  `PATH` (`python/rsyscall/tasks/ssh.py:101`, `python/rsyscall/tasks/ssh.py:326-327`), and
+  `rsyscall.nix` imports `nixdeps` only for type checking (`python/rsyscall/nix.py:25-26`), so the
   bootstrap tests run without a Nix store (see "Oracle gaps").
 
 ## Python-side defects noticed
@@ -102,10 +112,11 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
 
 ## Oracle gaps
 
-- `tests/baseline-c.txt` exercises the in-process clone server, the futex helper and the trampoline
-  through the core test modules, but none of the three helper executables and not the persistent
-  server: `test_ssh.py`, `test_stdinboot.py`, `test_stub.py` and `test_persistent.py` are excluded
-  from collection because they import Nix-dependent modules (`python/rsyscall/tests/conftest.py:19-29`,
-  `tests/baseline-notes.md`). The handshakes in `bootstrap-handshakes.md` §2 to §5 are therefore
-  backed by `python/` and by the black-box observations listed in `README.md` §4, not by the
-  recorded baseline. A future baseline should include those modules once the Nix coupling is gone.
+- Until the Nix coupling was removed, `tests/baseline-c.txt` exercised the in-process clone server,
+  the futex helper and the trampoline through the core test modules, but none of the three helper
+  executables and not the persistent server: `test_ssh.py`, `test_stdinboot.py`, `test_stub.py` and
+  `test_persistent.py` were excluded from collection. They are collected now wherever `ssh`, `sshd`
+  and `ssh-keygen` exist (`python/rsyscall/tests/conftest.py:19-29`, `tests/baseline-notes.md`), so
+  the handshakes in `bootstrap-handshakes.md` §2 to §5 are backed by the recorded baselines as well
+  as by the black-box observations listed in `README.md` §4; only `test_nix.py` and
+  `test_ssh.py::test_nix_deploy` still need a Nix store.

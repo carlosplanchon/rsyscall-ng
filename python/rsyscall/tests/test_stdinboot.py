@@ -13,7 +13,7 @@ class TestStdinboot(TrioTestCase):
 
     @classmethod
     async def asyncSetUpClass(cls) -> None:
-        path = await stdin_bootstrap_path_with_nix(cls.process)
+        path = await stdin_bootstrap_path(cls.process)
         cls.command = Command(path, ['rsyscall-stdin-bootstrap'], {})
         cls.local_child, cls.remote = await stdin_bootstrap(cls.process, cls.command)
 

@@ -32,7 +32,11 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 - [x] PEP 517 packaging: `pip install .` and `make wheel` build an abi3 wheel
       that bundles the Rust native side (`rsyscall/_native`); `make wheel-test`
       checks the installed wheel against the recorded baseline
-- [ ] decoupling the bootstrap helpers from Nix, CI, aarch64 (later phases)
+- [x] bootstrap helpers decoupled from Nix: `rsyscall.tasks.{stub,stdin_bootstrap,ssh}`
+      take them from `rsyscall._native` and OpenSSH from `PATH`; `test_stub`,
+      `test_stdinboot`, `test_persistent` and `test_ssh` are in the baseline, so the
+      differential test covers the helper executables
+- [ ] CI, aarch64 (later phases)
 
 ## Layout
 
@@ -111,12 +115,16 @@ never packaged.
 
 ```sh
 make test PYTEST_ARGS='-k clone'          # any pytest arguments
-RSYSCALL_TEST_OPTIONAL=1 make test        # also collect the Nix/ssh/device-dependent modules
+RSYSCALL_TEST_OPTIONAL=1 make test        # collect even the modules whose environment is missing
 ```
 
-Modules that need a Nix store, `sshd`, `/dev/fuse`, `/dev/net/tun` or the
-upstream `nixdeps` build hook are skipped unless `RSYSCALL_TEST_OPTIONAL=1` is
-set. The baseline records the status of every collected test; it is a
+Modules are ignored at collection time only when what they need is missing on
+this machine: a Nix store (`test_nix.py`); `ssh`, `sshd` and `ssh-keygen` on
+`PATH` or in `/usr/sbin`, `/usr/local/sbin`, `/sbin` (`test_ssh.py`,
+`test_persistent.py`); `/dev/fuse` (`test_fuse.py`); `pyroute2` and
+`/dev/net/tun` (`test_net.py`). `RSYSCALL_TEST_OPTIONAL=1` collects them
+regardless, and the fourth header line of a baseline records what was ignored
+and why. The baseline records the status of every collected test; it is a
 description of reality, not a promise that everything passes. `make baseline`
 runs every test in its own interpreter: the tests share the module-level
 `rsyscall.local_process`, whose state does not survive a test being killed by

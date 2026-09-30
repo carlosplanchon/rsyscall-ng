@@ -87,8 +87,10 @@ and `native-abi.md` §3 to §6.
 
 ## 2. ssh bootstrap: `rsyscall-bootstrap`
 
-**Install path.** The executable is `<librsyscall>/libexec/rsyscall/rsyscall-bootstrap`
-(`python/rsyscall/tasks/ssh.py:105`). The client opens it read-only and ships it to the remote
+**Install path.** The executable is `rsyscall-bootstrap`, resolved by `rsyscall._native.helper`
+(the copy bundled in `rsyscall/_native/`, or `$RSYSCALL_LIBEXEC_DIR/rsyscall-bootstrap`, i.e. the
+prefix's `libexec/rsyscall/` in the development flow; `python/rsyscall/tasks/ssh.py:105`). The
+client opens it read-only and ships it to the remote
 host as the standard input of an `ssh` command whose remote script is
 `python/rsyscall/tasks/ssh_bootstrap.sh` (`python/rsyscall/tasks/ssh.py:51`,
 `python/rsyscall/tasks/ssh.py:161`, `python/rsyscall/tasks/ssh.py:186-188`):
@@ -183,8 +185,11 @@ writes (length, bytes), and on EOF of the syscall socket printed
 
 ## 3. stdin bootstrap: `rsyscall-stdin-bootstrap`
 
-**Install path and invocation.** The executable is `<librsyscall>/libexec/rsyscall/rsyscall-stdin-bootstrap`
-(`python/rsyscall/tasks/stdin_bootstrap.py:54`). It is exec'd by an arbitrary command that passes
+**Install path and invocation.** The executable is `rsyscall-stdin-bootstrap`, resolved by
+`rsyscall._native.helper` (the copy bundled in `rsyscall/_native/`, or
+`$RSYSCALL_LIBEXEC_DIR/rsyscall-stdin-bootstrap`, i.e. the prefix's `libexec/rsyscall/` in the
+development flow; `python/rsyscall/tasks/stdin_bootstrap.py:54`). It is exec'd by an arbitrary
+command that passes
 its stdin down, e.g. `Command(path, ['rsyscall-stdin-bootstrap'], {})` or `sudo <path>`
 (`python/rsyscall/tasks/stdin_bootstrap.py:1-9`, `python/rsyscall/tests/test_stdinboot.py:16-18`);
 it MUST work when started with `argv[0]` alone (`python/rsyscall/tests/test_stdinboot.py:17`);
@@ -229,11 +234,13 @@ socket.
 
 ## 4. Unix stub: `rsyscall-unix-stub`
 
-**Install path and environment variable.** The executable is
-`<librsyscall>/libexec/rsyscall/rsyscall-unix-stub` (`python/rsyscall/tasks/stub.py:91`). It MUST
+**Install path and environment variable.** The executable is `rsyscall-unix-stub`, resolved by
+`rsyscall._native.helper` (the copy bundled in `rsyscall/_native/`, or
+`$RSYSCALL_LIBEXEC_DIR/rsyscall-unix-stub`, i.e. the prefix's `libexec/rsyscall/` in the
+development flow; `python/rsyscall/tasks/stub.py:91`). It MUST
 read the socket path from the environment variable `RSYSCALL_UNIX_STUB_SOCK_PATH`
-(`python/rsyscall/tasks/stub.py:96-98`); the name `RSYSCALL_UNIX_STUB_SOCK` in the module
-docstring is not what the client sets (`python/rsyscall/tasks/stub.py:7-8`). The client writes a
+(`python/rsyscall/tasks/stub.py:96-98`; the module docstring names the same variable,
+`python/rsyscall/tasks/stub.py:7-8`). The client writes a
 wrapper script with mode 0755 (`python/rsyscall/tasks/stub.py:94-99`):
 
 ```sh

@@ -92,7 +92,7 @@ await self.write_to_fd(data)                 # raw bytes follow the request on t
 **Memory read (L179-188)**
 ```python
 read_fut = Future.start(self.read_from_fd(src.size()))   # Read(count) slot queued first
-await self.infallible_send(src)                           # -> sendto(server_fd, src, len, 0, 0, 0)
+await self.infallible_send(src)                           # -> sendto(server_fd, src, len, MSG_NOSIGNAL, 0, 0)
 ```
 - On the server-to-client stream this gives `len` raw memory bytes, then the 8-byte `sendto` result.
 - A partial send raises "somehow got a partial send..." (L181-182).
@@ -251,7 +251,7 @@ if -4095 < response < 0:
 - The first remote syscalls are a 4 GiB mmap, `epoll_create`, and the SIGCHLD signalfd (L289-292).
 
 ### 4.2 stdin bootstrap: `python/rsyscall/tasks/stdin_bootstrap.py`
-1. The path is `<librsyscall>/libexec/rsyscall/rsyscall-stdin-bootstrap` (L54). The test runs it as `Command(path, ['rsyscall-stdin-bootstrap'], {})` (`tests/test_stdinboot.py` L17).
+1. The path was `<librsyscall>/libexec/rsyscall/rsyscall-stdin-bootstrap`; since the decoupling from Nix it is `rsyscall._native.helper("rsyscall-stdin-bootstrap")` (L54). The test runs it as `Command(path, ['rsyscall-stdin-bootstrap'], {})` (`tests/test_stdinboot.py` L17).
 2. L72-80: create a `socketpair(AF_UNIX, SOCK_STREAM)`, dup2 one end onto the child's fd 0, and exec the command.
 3. L83-86: open two channels (syscall, data) and get `connection_fd` from `prep_fd_transfer()`.
 4. L87-90: one `sendmsg` on the parent's end, flags 0. It carries a 1-byte iov from an uninitialized `malloc`, and one SCM_RIGHTS cmsg holding `[passed_syscall_sock, passed_data_sock, connection_fd]` in that order.
@@ -302,7 +302,7 @@ if -4095 < response < 0:
 
 ### 4.5 Is there an `rsyscall-server` executable?
 - No. Nothing in `python/` starts an `rsyscall-server` executable, and nothing mentions `describefd`. Only the `rsyscall_server` symbol appears (`ffibuilder.py` L1237 and L1256, `loader.py` L129).
-- The only executables referenced are `rsyscall-bootstrap`, `rsyscall-stdin-bootstrap` and `rsyscall-unix-stub`. Their paths come from a generated module, `rsyscall._nixdeps.librsyscall`, which is not in the tree.
+- The only executables referenced are `rsyscall-bootstrap`, `rsyscall-stdin-bootstrap` and `rsyscall-unix-stub`. Their paths came from a generated module, `rsyscall._nixdeps.librsyscall`, which is not in the tree; since the decoupling from Nix they come from `rsyscall._native.helper` (the bundled copies, or `RSYSCALL_LIBEXEC_DIR`).
 
 ### 4.6 Channels: `python/rsyscall/network/connection.py`
 - **`FDPassConnection`** (L94-166): channels are socketpairs (L137-143); `move_fds` sends a 1-byte message with SCM_RIGHTS, and the target task receives it with `recvmsg` (L116-135); only the access side is made non-blocking (L145-153); `prep_fd_transfer` returns the target-side fd (L155-156).

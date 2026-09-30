@@ -23,7 +23,7 @@ import rsyscall.far as far
 import rsyscall.handle as handle
 import rsyscall.memory.allocator as memory
 import rsyscall.near.types as near
-import rsyscall.nix as nix
+import rsyscall._native as native
 import struct
 import trio
 
@@ -35,23 +35,23 @@ from rsyscall.sys.socket import SOCK, AF, SendmsgFlags, Socketpair, SendMsghdr, 
 from rsyscall.sys.uio import IovecList
 
 __all__ = [
-    "stdin_bootstrap_path_with_nix",
+    "stdin_bootstrap_path", "stdin_bootstrap_path_with_nix",
     "stdin_bootstrap",
 ]
 
 logger = logging.getLogger(__name__)
 
-async def stdin_bootstrap_path_with_nix(process: Process) -> Path:
+async def stdin_bootstrap_path(process: Process) -> Path:
     """Get the path to the rsyscall-stdin-bootstrap executable.
 
     We return a Path rather than a Command because the typical usage
     of this path will be to pass it as an argument to some other
-    command, such as sudo.
-
+    command, such as sudo. The path is resolved here, on the local
+    filesystem (rsyscall._native: the bundled copy, or RSYSCALL_LIBEXEC_DIR);
+    `process` and whoever finally execs it must be able to reach it (root
+    under sudo can; another user needs a world-traversable location).
     """
-    import rsyscall._nixdeps.librsyscall
-    rsyscall_path = await nix.deploy(process, rsyscall._nixdeps.librsyscall.closure)
-    return rsyscall_path/"libexec"/"rsyscall"/"rsyscall-stdin-bootstrap"
+    return Path(native.helper("rsyscall-stdin-bootstrap"))
 
 async def stdin_bootstrap(
         parent: Process,
@@ -137,3 +137,7 @@ async def stdin_bootstrap(
         stderr=base_task.make_fd_handle(near.FileDescriptor(2)),
     )
     return child_pid, new_parent
+
+async def stdin_bootstrap_path_with_nix(process: Process) -> Path:
+    "The old name of `stdin_bootstrap_path`, from when the executable was deployed from a Nix closure"
+    return await stdin_bootstrap_path(process)

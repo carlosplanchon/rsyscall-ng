@@ -2,31 +2,50 @@
 
 Two responsibilities:
 
-* Modules that need a Nix store, the upstream ``nixdeps`` build hook, ``sshd`` or
-  special devices are ignored unless ``RSYSCALL_TEST_OPTIONAL=1`` is set. They have
-  to be excluded at collection time, because they fail at import; markers can't help.
-
-* If ``RSYSCALL_BASELINE_OUT=<file>`` is set, a sorted ``<STATUS> <nodeid>`` list of
-  every collected test is written at session end (see tests/baseline-c.txt). The
-  header carries no timestamps or hostnames, so identical runs give identical files.
-
+* Modules whose environment is missing on this machine (a Nix store, the OpenSSH executables,
+  ``/dev/fuse``, ``pyroute2`` and ``/dev/net/tun``) are ignored at collection time, with the
+  reason, unless ``RSYSCALL_TEST_OPTIONAL=1`` is set: they fail at import, so markers can't help.
+* If ``RSYSCALL_BASELINE_OUT=<file>`` is set, a sorted ``<STATUS> <nodeid>`` list of every
+  collected test is written at session end (see tests/baseline-c.txt). The header carries no
+  timestamps or hostnames, so identical runs give identical files; its fourth line records
+  which modules were ignored, and why.
 """
 from __future__ import annotations
+import importlib.util
 import os
+import shutil
 import sys
 
-# Excluded by default, with the reason each module cannot run in a plain environment.
-OPTIONAL_MODULES = [
-    "test_fuse.py",        # /dev/fuse; imports rsyscall.tasks.stub -> rsyscall.nix (nixdeps)
-    "test_net.py",         # /dev/net/tun and CAP_NET_ADMIN
-    "test_nix.py",         # a working Nix store; imports rsyscall._nixdeps.*
-    "test_persistent.py",  # imports rsyscall.tasks.ssh -> rsyscall.nix (nixdeps)
-    "test_ssh.py",         # sshd plus Nix; imports rsyscall._nixdeps.*
-    "test_stdinboot.py",   # imports rsyscall.tasks.stdin_bootstrap -> rsyscall.nix (nixdeps)
-    "test_stub.py",        # imports rsyscall.tasks.stub -> rsyscall.nix (nixdeps)
-]
+# Ignored at collection time when what they need is missing on this machine; RSYSCALL_TEST_OPTIONAL=1
+# collects them regardless. Each entry lists checks that return None, or the reason (see below).
+OPTIONAL_MODULES = {
+    "test_fuse.py":       lambda: [_dev("/dev/fuse")],
+    "test_net.py":        lambda: [_mod("pyroute2"), _dev("/dev/net/tun")],
+    "test_nix.py":        lambda: ["needs a Nix store and the rsyscall._nixdeps closures"],
+    "test_persistent.py": lambda: [_exe("ssh"), _exe("sshd"), _exe("ssh-keygen")],
+    "test_ssh.py":        lambda: [_exe("ssh"), _exe("sshd"), _exe("ssh-keygen")],
+}
+SBIN_DIRS = ["/usr/sbin", "/usr/local/sbin", "/sbin"]  # where Debian keeps sshd; rarely on a user's PATH
+
+def _exe(name: str) -> str | None:
+    "None when `name` is executable on PATH or in SBIN_DIRS, else the reason"
+    path = os.pathsep.join([os.environ.get("PATH", os.defpath), *SBIN_DIRS])
+    return None if shutil.which(name, path=path) else f"{name} not found on PATH or in the sbin directories"
+
+def _dev(path: str) -> str | None:
+    return None if os.access(path, os.R_OK | os.W_OK) else f"{path} is not readable and writable"
+
+def _mod(name: str) -> str | None:
+    return None if importlib.util.find_spec(name) else f"the {name} module is not installed"
+
+IGNORED: dict[str, str] = {}
+"module -> why it is not collected on this machine; empty with RSYSCALL_TEST_OPTIONAL=1"
 if not os.environ.get("RSYSCALL_TEST_OPTIONAL"):
-    collect_ignore = list(OPTIONAL_MODULES)
+    for _module, _checks in OPTIONAL_MODULES.items():
+        _reasons = [r for r in _checks() if r]
+        if _reasons:
+            IGNORED[_module] = "; ".join(_reasons)
+collect_ignore = sorted(IGNORED)
 
 #### Baseline recorder ####
 _RANK = {"PASS": 0, "SKIP": 1, "XFAIL": 1, "XPASS": 2, "FAIL": 3, "ERROR": 4}
@@ -78,6 +97,7 @@ def pytest_sessionfinish(session, exitstatus):
         f"# backend={os.environ.get('RSYSCALL_BACKEND', 'c')} python={sys.version_info.major}.{sys.version_info.minor}"
         f" trio={trio.__version__} pytest={pytest.__version__}",
         f"# {len(_STATUS)} entries: {counts}",
+        "# collect_ignore=" + (", ".join(f"{m} ({IGNORED[m]})" for m in sorted(IGNORED)) or "none"),
     ]
     for nodeid in sorted(_STATUS):
         suffix = f"  # {_DETAIL[nodeid]}" if nodeid in _DETAIL else ""
