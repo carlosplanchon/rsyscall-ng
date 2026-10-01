@@ -1,0 +1,30 @@
+# Dependabot configuration for rsyscall-ng.
+# Keeps the GitHub Actions and the Rust test dependencies up to date.
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# The Python dependencies are not listed here on purpose: pyproject.toml only declares lower
+# bounds, there is no lockfile, and the weekly CI run (the cron in ci.yml) already installs and
+# tests their newest releases.
+version: 2
+updates:
+  # GitHub Actions used by the CI and release workflows. They are pinned to commit SHAs, with the
+  # release in a trailing comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # The Rust workspace in native/. The native side has no runtime dependencies; these are the
+  # test dependencies of rsyscall-core (serde, serde_json, linux-raw-sys).
+  - package-ecosystem: "cargo"
+    directory: "/native"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo:
+        patterns:
+          - "*"
