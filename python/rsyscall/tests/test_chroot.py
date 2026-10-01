@@ -16,6 +16,8 @@ class TestChroot(TrioTestCase):
 
     async def test_basic(self) -> None:
         await self.process.mkdir(self.tmpdir/"proc")
-        await self.process.mount("/proc", self.tmpdir/"proc", "", MS.BIND, "")
+        # recursive: /proc has submounts (binfmt_misc), which a user namespace locks, and
+        # a plain bind of a mount with locked submounts fails with EINVAL
+        await self.process.mount("/proc", self.tmpdir/"proc", "", MS.BIND|MS.REC, "")
         await self.process.task.chroot(await self.process.ptr(self.tmpdir))
         await self.process.task.open(await self.process.ptr("/proc/self"), O.RDONLY)

@@ -112,7 +112,7 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 
 | Path                       | What                                                        |
 |----------------------------|-------------------------------------------------------------|
-| `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`, `rsysapps`) |
+| `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`) |
 | `pyproject.toml`, `setup.py`, `MANIFEST.in` | PEP 517 packaging of `python/` (setuptools + cffi); `setup.py` builds `native/` with cargo and bundles its artefacts |
 | `python/rsyscall/_native/` | `rsyscall._native`: where the bundled `librsyscall.so` and helper executables live, and how to find them |
 | `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes, CI runner setup |

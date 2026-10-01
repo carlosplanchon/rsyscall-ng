@@ -24,11 +24,11 @@ classifiers = [
     "Framework :: Trio",
     "Topic :: System :: Operating System Kernels :: Linux",
 ]
-# outcome >= 1.3 (generic Outcome) and trio >= 0.25 (ExceptionGroup semantics) match the compat patches in python/.
-dependencies = ["cffi>=1.15", "trio>=0.25", "outcome>=1.3", "typeguard>=2"]
+# outcome >= 1.3 (generic Outcome) and trio >= 0.25 (ExceptionGroup semantics) match the compat patches in python/;
+# typeguard >= 4 has the check_type(value, expected_type) signature that arepl uses.
+dependencies = ["cffi>=1.15", "trio>=0.25", "outcome>=1.3", "typeguard>=4"]
 
 [project.optional-dependencies]
-rsysapps = ["h11"]
 net = ["pyroute2"]
 
 [tool.setuptools]

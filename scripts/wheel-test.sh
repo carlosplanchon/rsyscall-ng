@@ -33,7 +33,7 @@ case "$DIST" in
         WHEEL=$(ls "$BUILD"/wheel/rsyscall_ng-*.whl) ;;
     *) echo "wheel-test.sh: not a wheel or an sdist: $DIST" >&2; exit 2 ;;
 esac
-uv pip install --quiet --python "$VENV/bin/python" "$WHEEL" pytest pytest-timeout
+uv pip install --quiet --python "$VENV/bin/python" "$WHEEL" pyroute2 pytest pytest-timeout  # pyroute2: the net extra, for test_net
 echo "== $WHEEL"
 unzip -l "$WHEEL" | grep -E '_native/|_raw|dist-info/METADATA' | awk '{print "  ", $4, "(" $1 " bytes)"}'
 cd /tmp
@@ -49,11 +49,11 @@ PY
 echo "== smoke test"
 run "$ROOT/scripts/hello.py"
 echo "== package test-suite from the installed wheel, one interpreter per test (scripts/baseline.py),"
-echo "   compared with tests/baseline-rust.txt (test_repl deselected: it hangs, see tests/baseline-notes.md)"
+echo "   compared with tests/baseline-rust.txt"
 TESTS_DIR=$("$VENV/bin/python" -c 'import os, rsyscall.tests; print(os.path.dirname(rsyscall.tests.__file__))')
 : > "$VENV/pytest.ini"   # an empty config: the repository's pytest.ini must not apply, and the rootdir is the installed tests directory
 RSYSCALL_TEST_CWD="$TESTS_DIR" RSYSCALL_PYTEST_ARGS="-c $VENV/pytest.ini --rootdir $TESTS_DIR" \
     RSYSCALL_BASELINE_LOGS="$VENV/baseline-logs" BASELINE_OUT="$VENV/results.txt" RSYSCALL_BACKEND=rust \
-    run "$ROOT/scripts/baseline.py" -k "not test_repl" > "$VENV/baseline.log" 2>&1 || true
+    run "$ROOT/scripts/baseline.py" > "$VENV/baseline.log" 2>&1 || true
 tail -n 4 "$VENV/baseline.log" | sed 's/^/   /'
-python3 "$ROOT/scripts/baseline-compare.py" "$ROOT/tests/baseline-rust.txt" "$VENV/results.txt" --ignore test_repl
+python3 "$ROOT/scripts/baseline-compare.py" "$ROOT/tests/baseline-rust.txt" "$VENV/results.txt"

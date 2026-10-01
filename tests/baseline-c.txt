@@ -1,12 +1,12 @@
 # rsyscall test baseline. Format: <STATUS> <pytest nodeid> [ # <exception class>]
 # backend=c python=3.14 trio=0.34.0 pytest=9.1.1 isolation=one-process-per-test timeout=60s
-# 96 entries: PASS=91, SKIP=2, XFAIL=0, XPASS=0, FAIL=2, ERROR=1
-# collect_ignore=test_net.py (the pyroute2 module is not installed), test_nix.py (needs a Nix store and the rsyscall._nixdeps closures)
+# 104 entries: PASS=102, SKIP=2, XFAIL=0, XPASS=0, FAIL=0, ERROR=0
+# collect_ignore=test_nix.py (needs a Nix store and the rsyscall._nixdeps closures)
 PASS python/rsyscall/tests/test_allocator.py::TestMisc::test_madvise
 PASS python/rsyscall/tests/test_benchmark.py::TestBenchmark::test_bench
 PASS python/rsyscall/tests/test_cat.py::TestCat::test_cat_async
 PASS python/rsyscall/tests/test_cat.py::TestCat::test_cat_pipe
-FAIL python/rsyscall/tests/test_chroot.py::TestChroot::test_basic  # OSError
+PASS python/rsyscall/tests/test_chroot.py::TestChroot::test_basic
 PASS python/rsyscall/tests/test_clone.py::TestClone::test_async
 PASS python/rsyscall/tests/test_clone.py::TestClone::test_check_in_nursery
 PASS python/rsyscall/tests/test_clone.py::TestClone::test_exec
@@ -25,7 +25,7 @@ PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_failure
 PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_parallel
 PASS python/rsyscall/tests/test_concurrency.py::TestConcur::test_through_multiple
 PASS python/rsyscall/tests/test_concurrency.py::TestConcurrency::test_nest_cancel_inside_shield
-FAIL python/rsyscall/tests/test_concurrency.py::TestConcurrency::test_nursery  # rsyscall.tests.test_concurrency.MyException
+PASS python/rsyscall/tests/test_concurrency.py::TestConcurrency::test_nursery
 PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_afd_with_handle
 PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_delayed_eagain
 PASS python/rsyscall/tests/test_epoller.py::TestEpoller::test_local
@@ -51,6 +51,14 @@ PASS python/rsyscall/tests/test_ip.py::TestIP::test_stream_listen
 PASS python/rsyscall/tests/test_ip.py::TestIP::test_write_to_unconnected
 PASS python/rsyscall/tests/test_misc.py::TestMisc::test_do_cloexec_except
 PASS python/rsyscall/tests/test_mmap.py::TestMisc::test_madvise
+PASS python/rsyscall/tests/test_net.py::TestNet::test_connected_tun
+PASS python/rsyscall/tests/test_net.py::TestNet::test_ioctl
+PASS python/rsyscall/tests/test_net.py::TestNet::test_rtnetlink
+PASS python/rsyscall/tests/test_net.py::TestNet::test_setns_ownership
+PASS python/rsyscall/tests/test_net.py::TestNetLocalPort::test_dgram
+PASS python/rsyscall/tests/test_net.py::TestNetLocalPort::test_dgram_reuseaddr
+PASS python/rsyscall/tests/test_net.py::TestNetLocalPort::test_reuseaddr_listen
+PASS python/rsyscall/tests/test_net.py::TestNetLocalPort::test_stream_reuseaddr
 PASS python/rsyscall/tests/test_persistent.py::TestPersistent::test_exit_reconnect
 PASS python/rsyscall/tests/test_persistent.py::TestPersistent::test_make_persistent
 PASS python/rsyscall/tests/test_persistent.py::TestPersistent::test_nest_exit
@@ -68,7 +76,7 @@ PASS python/rsyscall/tests/test_pointer.py::TestPointer::test_use_after_free_all
 PASS python/rsyscall/tests/test_pointer.py::TestPointer::test_use_after_free_ptr
 PASS python/rsyscall/tests/test_prctl.py::TestUser::test_name
 PASS python/rsyscall/tests/test_proc.py::TestProc::test_pgid
-ERROR python/rsyscall/tests/test_repl.py::TestREPL::test_repl  # RuntimeError
+PASS python/rsyscall/tests/test_repl.py::TestREPL::test_repl
 PASS python/rsyscall/tests/test_resource.py::TestResource::test_rlimit
 PASS python/rsyscall/tests/test_sched.py::TestEventfd::test
 PASS python/rsyscall/tests/test_seek.py::TestSeek::test_ficlonerange

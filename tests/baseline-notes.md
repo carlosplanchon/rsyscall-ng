@@ -6,45 +6,20 @@ upstream Python code does today against the unmodified upstream C library; it is
 list of things that are supposed to pass. Never edit it by hand.
 
 Recorded on 2026-09-30 with Python 3.14.7, trio 0.34.0, pytest 9.1.1, cffi 2.1.1, outcome
-1.3.0, OpenSSH 10.5p1, on Linux 7.2.4-arch1-2 x86_64 as an unprivileged user with unprivileged
-user namespaces enabled and `/dev/fuse` world-accessible. The C and the Rust recordings are
-identical apart from the header's backend field. (First recorded on 2026-09-28 with the core
-modules only; the helper tests joined on 2026-09-30, see below.)
+1.3.0, typeguard 4.6.0, pyroute2 0.9.6, OpenSSH 10.5p1, on Linux 7.2.4-arch1-2 x86_64 as an
+unprivileged user with unprivileged user namespaces enabled and `/dev/fuse` and `/dev/net/tun`
+world-accessible. The C and the Rust recordings are identical apart from the header's backend
+field. (First recorded on 2026-09-28 with the core modules only; the helper tests and then
+`test_net.py` joined on 2026-09-30, and the failures listed under "Fixed failures" were fixed.)
 
 | Status | Count |
 |--------|-------|
-| PASS   | 91    |
+| PASS   | 102   |
 | SKIP   | 2     |
-| FAIL   | 2     |
-| ERROR  | 1     |
+| FAIL   | 0     |
+| ERROR  | 0     |
 
-## Tests that do not pass
-
-- `test_chroot.py::TestChroot::test_basic` (FAIL, `OSError: [Errno 22] Invalid argument`).
-  Fails while bind-mounting `/proc` into a temporary directory inside a fresh user and
-  mount namespace (`Process.mount` -> `mount(2)` returns EINVAL). The cause has not been
-  investigated; the compat patches are not involved (the failure is a kernel return
-  value), and both backends behave identically. It fails the same way on the GitHub-hosted
-  Ubuntu 24.04 runners (kernel 6.17) and passes only inside a privileged Docker container
-  (the local CI simulation, on this host's kernel), whose own `/proc` mount differs.
-
-- `test_concurrency.py::TestConcurrency::test_nursery` (FAIL, `MyException: ha ha`).
-  `sleep_and_throw()` raises `MyException` from inside its own nursery. Since trio 0.25
-  nurseries always raise an `ExceptionGroup`, so the `except MyException` in the test no
-  longer catches it and the group escapes (the harness unwraps single-exception groups
-  when reporting, hence the bare `MyException` in the baseline). This is a behaviour
-  change in trio, to be addressed in the trio-migration phase, probably by updating the
-  test to catch the group.
-
-- `test_repl.py::TestREPL::test_repl` (ERROR; timeout plus teardown error). The test
-  hangs inside `rsyscall.wish.serve_repls` waiting in `epoll_wait` and is killed by
-  pytest-timeout after 60 s; `tearDownClass` then fails with `RuntimeError: Attempted to
-  call run() from inside a run()` because the interrupted trio run left the module-level
-  `local_process` unusable. Suspected cause, not yet confirmed: `arepl/repl.py` calls
-  `typeguard.check_type('return value', result.value, wanted_type)`, the typeguard 2
-  signature; typeguard 4 (installed) has `check_type(value, expected_type)`, so the REPL
-  evaluation path probably raises and the server keeps waiting for input. To be handled
-  when `arepl`/`wish` are modernised.
+## Skipped tests
 
 - `test_ip.py::TestIP::test_send_is_not_atomic` (SKIP): skipped by upstream with
   `@unittest.skip("This test is slow and non-deterministic")`.
@@ -52,13 +27,40 @@ modules only; the helper tests joined on 2026-09-30, see below.)
 - `test_ssh.py::TestSSH::test_nix_deploy` (SKIP): needs the Nix closures of the upstream
   `nixdeps` build (`rsyscall._nixdeps`), which this tree does not have.
 
+## Fixed failures
+
+The first baselines also recorded two failures and an error, all of them bugs in the tests
+or in the Python side rather than in either native backend, and `test_net.py` failed once
+`pyroute2` was installed:
+
+- `test_chroot.py::TestChroot::test_basic` (FAIL, `OSError: [Errno 22] Invalid argument`).
+  The test bind-mounted `/proc` without `MS_REC` inside a new user and mount namespace.
+  `/proc` carries submounts (`binfmt_misc` here and on the GitHub runners), which the user
+  namespace locks, and a non-recursive bind of a mount with locked submounts fails with
+  EINVAL; it passed only in the Docker simulation, whose `/proc` has none. It now binds with
+  `MS_BIND|MS_REC`.
+- `test_concurrency.py::TestConcurrency::test_nursery` (FAIL, `MyException`). Since trio
+  0.25 a nursery raises an `ExceptionGroup`; the test now catches it with `except*`.
+- `test_repl.py::TestREPL::test_repl` (ERROR, a hang until pytest-timeout). Two
+  incompatibilities in `arepl` made the REPL report an error for every line and wait for more
+  input forever. It called `typeguard.check_type` with typeguard 2's signature, which raised
+  a `TypeError` that the REPL treats as a type mismatch, and it relied on codeop's private
+  `_maybe_compile`, whose signature changed in Python 3.12 and again in 3.14.
+  `python/arepl/astcodeop.py` now detects incomplete input with the public `compile` and
+  codeop's flags, and classifies input exactly like `codeop.compile_command` on 3.12 to
+  3.15; `pyproject.toml` requires typeguard 4.
+- `test_net.py::TestNet::test_rtnetlink` (FAIL, `TypeError`): pyroute2 0.9 returns a
+  generator from `marshal.parse`, which the test now turns into a list.
+
 ## Modules excluded from the baseline
 
 Modules are ignored at collection time only when what they need is missing on the
 recording machine (`OPTIONAL_MODULES` in `python/rsyscall/tests/conftest.py`); the fourth
-header line of each baseline records which ones and why. Here: `test_nix.py` (needs a Nix
-store; never collected without `RSYSCALL_TEST_OPTIONAL=1`) and `test_net.py` (`pyroute2` is
-not installed in the venvs). `test_stub.py`, `test_stdinboot.py`, `test_persistent.py` and
+header line of each baseline records which ones and why. Here only `test_nix.py` is (it needs
+a Nix store; never collected without `RSYSCALL_TEST_OPTIONAL=1`). `test_net.py` needs
+`pyroute2`, the `net` extra that `make venv` and the wheel test install, and `/dev/net/tun`;
+its `test_connected_tun` also runs `socat`, which `scripts/ci-setup.sh` installs on the CI
+runners. `test_stub.py`, `test_stdinboot.py`, `test_persistent.py` and
 `test_ssh.py` exercise the three helper executables and the persistent server through
 `rsyscall._native` (the backend's `RSYSCALL_LIBEXEC_DIR`) and the system OpenSSH (`ssh`,
 `sshd -i` as a `ProxyCommand`, `ssh-keygen`; no listening sshd is needed);
@@ -68,7 +70,8 @@ collected wherever `/dev/fuse` is readable and writable.
 ## Why one interpreter per test
 
 The first whole-suite run in a single pytest process recorded 17 spurious failures: after
-`test_repl` was interrupted by the timeout, every later test errored with
+`test_repl`, which hung at the time (see "Fixed failures"), was interrupted by the timeout,
+every later test errored with
 `RuntimeError: Attempted to call run() from inside a run()`. All 17 pass when run alone.
 The tests share the module-level `rsyscall.local_process`, whose trio guest run and
 `dneio` continuations do not survive a test being killed mid-run. Per-test isolation costs
@@ -89,11 +92,17 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
 
 ## Other observations
 
+- `test_persistent.py::TestPersistent::test_nest_exit` failed once with a `RuntimeError`, in
+  the CI simulation's wheel job on CPython 3.12, and its log was lost with the container. It
+  then passed 440 runs: 80 in the development venvs of both backends, 60 with the wheel on
+  CPython 3.12, 100 in an Ubuntu 24.04 container with its system Python 3.12.3 and 200 in
+  eight parallel streams. The cause is unknown. The CI now uploads the per-test logs of a
+  failed distribution test, so a recurrence will keep its traceback.
 - `python/rsyscall/unistd/exec.py::_execveat` references `AT.FDCWD` without importing
   `AT` (upstream bug, unreachable in the suite; left untouched).
-- `rsyscall.linux.netlink` / `rtnetlink` import `pyroute2`, which the upstream `setup.py`
-  did not declare; only the optional `test_net.py` notices. The repository's
-  `pyproject.toml` declares it as the optional extra `net`.
+- `rsyscall.linux.rtnetlink` imports `pyroute2`, which the upstream `setup.py` did not
+  declare. The repository's `pyproject.toml` declares it as the optional extra `net`, which
+  the development venvs and the wheel test install, so `test_net.py` runs.
 - `test_fuse.py` failed with `ffi.error: struct fuse_in_header: wrong size for field
   'padding'` on current kernels: FUSE 7.38 split the trailing `uint32_t padding` into
   `uint16_t total_extlen; uint16_t padding`, and cffi's API mode checks the cdef against the
@@ -118,7 +127,7 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   only because its client happened to be at another phase of the epoll loop when it shut the
   connection down. `SyscallConnection.infallible_send` now requests the `sendto` with
   `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`), which servers execute verbatim.
-- Collection yields 96 tests on this machine: 71 from the core modules (69 `def test_`
+- Collection yields 104 tests on this machine: 71 from the core modules (69 `def test_`
   functions, plus two because `test_clone.py` defines two classes that inherit the same test
-  methods) and 25 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
-  `test_ssh.py` (9) and `test_fuse.py` (2).
+  methods) and 33 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
+  `test_ssh.py` (9), `test_fuse.py` (2) and `test_net.py` (8).

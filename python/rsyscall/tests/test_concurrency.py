@@ -24,7 +24,7 @@ class TestConcurrency(TrioTestCase):
             async def a2() -> None:
                 try:
                     await sleep_and_throw()
-                except MyException:
+                except* MyException:  # trio nurseries raise ExceptionGroups
                     pass
                 finally:
                     nursery.cancel_scope.cancel()

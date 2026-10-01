@@ -102,7 +102,7 @@ class TestNet(TrioTestCase):
 
         valid, _ = await netsock.read(await self.process.task.malloc(bytes, 4096))
         batch = IPBatch()
-        evs = batch.marshal.parse(await valid.read())
+        evs = list(batch.marshal.parse(await valid.read()))  # a generator since pyroute2 0.9
         self.assertEqual(len(evs), 1)
         self.assertEqual(evs[0]['event'], 'RTM_NEWLINK')
 

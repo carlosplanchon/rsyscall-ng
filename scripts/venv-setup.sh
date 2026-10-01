@@ -12,7 +12,7 @@ fi
 
 # Bake a RUNPATH into rsyscall/_raw*.so so `import rsyscall` works without LD_LIBRARY_PATH.
 export LDFLAGS="-Wl,-rpath,$PREFIX/lib${LDFLAGS:+ $LDFLAGS}"
-uv pip install --python "$PY" --reinstall-package rsyscall-ng -e "$ROOT"
+uv pip install --python "$PY" --reinstall-package rsyscall-ng -e "$ROOT[net]"  # net: pyroute2, for test_net
 uv pip install --python "$PY" pytest pytest-timeout
 
 "$PY" -c 'import rsyscall, rsyscall._raw; print("rsyscall imported from", rsyscall.__file__)'

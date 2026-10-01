@@ -96,8 +96,8 @@ async def run_repl(read: t.Callable[[], t.Awaitable[bytes]],
                 continue
             if isinstance(result, ReturnResult):
                 try:
-                    typeguard.check_type('return value', result.value, wanted_type)
-                except TypeError as e:
+                    typeguard.check_type(result.value, wanted_type)
+                except typeguard.TypeCheckError as e:
                     await print_exn(e)
                 else:
                     return result.value

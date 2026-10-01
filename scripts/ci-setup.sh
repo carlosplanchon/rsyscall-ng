@@ -5,8 +5,9 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update -qq
 # autotools and pkg-config build the upstream C oracle; the OpenSSH server is for test_ssh and
-# test_persistent, which run `sshd -i` as a ProxyCommand (no listening daemon is involved).
-sudo apt-get install -y -qq --no-install-recommends autoconf automake libtool pkg-config openssh-server > /dev/null
+# test_persistent, which run `sshd -i` as a ProxyCommand (no listening daemon is involved); socat
+# is for test_net.
+sudo apt-get install -y -qq --no-install-recommends autoconf automake libtool pkg-config openssh-server socat > /dev/null
 # Ubuntu 24.04 lets AppArmor restrict unprivileged user namespaces, which the test-suite creates
 # (clone with CLONE_NEWUSER); lift the restriction where the knob exists, then check.
 if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then

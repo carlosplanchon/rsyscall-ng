@@ -179,3 +179,13 @@ jobs:
             wheel) scripts/wheel-test.sh dist/*.whl ;;
             sdist) scripts/wheel-test.sh dist/*.tar.gz ;;
           esac
+      - name: Upload the per-test logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-dist-logs-${{ matrix.dist }}-${{ matrix.python }}
+          path: |
+            .venv-wheel/baseline-logs/
+            .venv-wheel/baseline.log
+          include-hidden-files: true  # .venv-wheel starts with a dot
+          if-no-files-found: ignore
