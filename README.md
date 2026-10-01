@@ -17,6 +17,15 @@ are then shaped with ordinary syscalls (`unshare`, `execve`, ...) instead of
 [![Platform: Linux x86_64](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)](https://github.com/carlosplanchon/rsyscall-ng#quick-start)
 [![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/carlosplanchon/rsyscall-ng)
 
+## Installation
+
+```sh
+uv add rsyscall-ng        # or: pip install rsyscall-ng
+```
+
+Linux x86_64 and CPython 3.12 or newer. The wheel bundles the native side, so
+nothing else is needed.
+
 ## What it looks like
 
 A process object runs system calls in the process it stands for. Here that is a
