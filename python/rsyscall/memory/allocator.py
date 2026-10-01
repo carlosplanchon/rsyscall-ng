@@ -181,11 +181,11 @@ class Allocation(AllocationInterface):
         # which is exactly the range of pages covered by this allocation:
         changed_start, changed_end = pg(self.start), pg(self.end)+1
         # Now, the intersection of these two ranges is exactly the range of pages which have just become free
-        # and therefore haven't yet had MADV_FREE called on them.
-        # The start of the intersection is the higher of the two start addresses...
-        just_freed_start = max(free_start, changed_start)
-        # ...and the end of the intersection is the lower of the two end addresses.
-        just_freed_end = min(free_end, changed_end)
+        # and therefore haven't yet had MADV_FREE called on them: from the higher start to the lower end.
+        just_freed_start, just_freed_end = max(free_start, changed_start), min(free_end, changed_end)
+        if just_freed_start < just_freed_end:  # stretch over those whole pages until they are removed (below)
+            self.start = min(self.start, just_freed_start * mapping.near.page_size)
+            self.end = max(self.end, just_freed_end * mapping.near.page_size)
         # asynchronously, if there's something in the intersection, MADV.REMOVE it
         async def final_free():
             try:
@@ -198,9 +198,9 @@ class Allocation(AllocationInterface):
                 # a SyscallError can easily happen, if we free in a process that's dead
                 # TODO try again with the main mapping in Arena, which shouldn't SyscallError
                 pass
-            # only now do we actually remove this allocation from the linked list;
-            # if we remove the allocation before MADV.REMOVE completes,
-            # we might allocate in that space, which will later be MADV.REMOVEd and deleted
+            # only now do we remove this allocation, stretched over the removed pages, from the list: until
+            # MADV.REMOVE completes, another task sharing this allocator could allocate there (the finger
+            # allocates right next to us) and write data that the MADV.REMOVE would then delete
             self._remove()
         reset(final_free())
 

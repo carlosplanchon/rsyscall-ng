@@ -163,32 +163,32 @@ class EpollWaiter:
         number_to_cb: t.Dict[int, Continuation[EPOLL]] = {}
         registered_activity_fd: t.Optional[FileDescriptor] = None
         while True:
-            if self.wait_readable:
-                await self.wait_readable()
-            activity_fd = self.epfd.task.sysif.get_activity_fd()
-            if activity_fd and (registered_activity_fd is not activity_fd):
-                # the activity fd changed, we need to register the new one
-                if registered_activity_fd:
-                    # delete the old registered activity fd
-                    await self.epfd.epoll_ctl(EPOLL_CTL.DEL, registered_activity_fd)
-                activity_fd_number = self.allocate_number(int(activity_fd))
-                # start up a coroutine to consume events from the activity_fd
-                async def devnull(activity_fd_number=activity_fd_number):
-                    while True:
-                        await self.queue.request(activity_fd_number)
-                reset(devnull())
-                await self.epfd.epoll_ctl(EPOLL_CTL.ADD, activity_fd, await self.epfd.task.ptr(
-                    EpollEvent(activity_fd_number,
-                               # not edge triggered; we don't want to block if there's
-                               # anything that can be read.
-                               EPOLL.IN|EPOLL.RDHUP|EPOLL.PRI|EPOLL.ERR|EPOLL.HUP)))
-                registered_activity_fd = activity_fd
+            if self.wait_readable: await self.wait_readable()
             try:
+                activity_fd = self.epfd.task.sysif.get_activity_fd()
+                if activity_fd and (registered_activity_fd is not activity_fd):
+                    # the activity fd changed, we need to register the new one
+                    if registered_activity_fd:  # delete the old registered activity fd
+                        with contextlib.suppress(FileNotFoundError):  # a retried DEL may find it done
+                            await self.epfd.epoll_ctl(EPOLL_CTL.DEL, registered_activity_fd)
+                    activity_fd_number = self.allocate_number(int(activity_fd))
+                    # start up a coroutine to consume events from the activity_fd
+                    async def devnull(activity_fd_number=activity_fd_number):
+                        while True:
+                            await self.queue.request(activity_fd_number)
+                    reset(devnull())
+                    activity_event = await self.epfd.task.ptr(EpollEvent(activity_fd_number,
+                        # not edge triggered; we don't want to block if there's anything that can be read.
+                        EPOLL.IN|EPOLL.RDHUP|EPOLL.PRI|EPOLL.ERR|EPOLL.HUP))
+                    with contextlib.suppress(FileExistsError):  # a retried ADD may find it done
+                        await self.epfd.epoll_ctl(EPOLL_CTL.ADD, activity_fd, activity_event)
+                    registered_activity_fd = activity_fd
+                # a root epoller blocks here until an fd is ready, the activity fd included
                 valid_events_buf, rest = await self.epfd.epoll_wait(input_buf, self.timeout)
                 received_events = await valid_events_buf.read()
             except SyscallHangup:
-                # retry the epoll_wait to support rsyscall.tasks.persistent, as documented there;
-                # for non-persistent tasks this will just fail with a SyscallSendError next time around.
+                # retry, registration of the activity fd included, to support rsyscall.tasks.persistent,
+                # as documented there; for non-persistent tasks the retry fails with a SyscallSendError.
                 continue
             except Exception as wait_error:
                 final_exn = wait_error
@@ -524,7 +524,7 @@ class AsyncFileDescriptor:
         """Read at most count bytes; possibly less, if we have a partial read.
 
         This allocates on each call. For some applications, you may want to avoid the cost of
-        allocation, by instead allocating a buffer with `Process.malloc` up front and reusing it
+        allocation, by instead allocating a buffer with `rsyscall.thread.Process.malloc` up front and reusing it
         across multiple calls to `AsyncFileDescriptor.read`.
 
         """

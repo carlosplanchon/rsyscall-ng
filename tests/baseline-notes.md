@@ -5,16 +5,17 @@ every collected test in its own interpreter and merges the results. It describes
 upstream Python code does today against the unmodified upstream C library; it is not a
 list of things that are supposed to pass. Never edit it by hand.
 
-Recorded on 2026-09-30 with Python 3.14.7, trio 0.34.0, pytest 9.1.1, cffi 2.1.1, outcome
+Recorded on 2026-10-01 with Python 3.14.7, trio 0.34.0, pytest 9.1.1, cffi 2.1.1, outcome
 1.3.0, typeguard 4.6.0, pyroute2 0.9.6, OpenSSH 10.5p1, on Linux 7.2.4-arch1-2 x86_64 as an
 unprivileged user with unprivileged user namespaces enabled and `/dev/fuse` and `/dev/net/tun`
 world-accessible. The C and the Rust recordings are identical apart from the header's backend
 field. (First recorded on 2026-09-28 with the core modules only; the helper tests and then
-`test_net.py` joined on 2026-09-30, and the failures listed under "Fixed failures" were fixed.)
+`test_net.py` joined on 2026-09-30, and the failures listed under "Fixed failures" were fixed;
+the two `TestActivityFdHangup` tests of `test_epoller.py` joined on 2026-10-01.)
 
 | Status | Count |
 |--------|-------|
-| PASS   | 102   |
+| PASS   | 104   |
 | SKIP   | 2     |
 | FAIL   | 0     |
 | ERROR  | 0     |
@@ -96,8 +97,12 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   the CI simulation's wheel job on CPython 3.12, and its log was lost with the container. It
   then passed 440 runs: 80 in the development venvs of both backends, 60 with the wheel on
   CPython 3.12, 100 in an Ubuntu 24.04 container with its system Python 3.12.3 and 200 in
-  eight parallel streams. The cause is unknown. The CI now uploads the per-test logs of a
-  failed distribution test, so a recurrence will keep its traceback.
+  eight parallel streams. Its likely cause was found on 2026-10-01: a race in
+  `Allocation.free` made the client read syscall responses as zero, which the connection code
+  reports as a `RuntimeError` ("somehow got a partial recv", "partial send"), in a few
+  percent of runs of the tests that give a child a root epoller. It is fixed (see
+  `docs/spec/evolution-notes.md`, "Python-side defects noticed"). The CI uploads the per-test
+  logs of a failed distribution test, so a recurrence would keep its traceback.
 - `python/rsyscall/unistd/exec.py::_execveat` references `AT.FDCWD` without importing
   `AT` (upstream bug, unreachable in the suite; left untouched).
 - `rsyscall.linux.rtnetlink` imports `pyroute2`, which the upstream `setup.py` did not
@@ -127,7 +132,7 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   only because its client happened to be at another phase of the epoll loop when it shut the
   connection down. `SyscallConnection.infallible_send` now requests the `sendto` with
   `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`), which servers execute verbatim.
-- Collection yields 104 tests on this machine: 71 from the core modules (69 `def test_`
+- Collection yields 106 tests on this machine: 73 from the core modules (71 `def test_`
   functions, plus two because `test_clone.py` defines two classes that inherit the same test
   methods) and 33 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
   `test_ssh.py` (9), `test_fuse.py` (2) and `test_net.py` (8).

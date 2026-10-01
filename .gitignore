@@ -32,3 +32,6 @@ __pycache__/
 /.venv-wheel/
 /python/rsyscall/_native/librsyscall.so
 /python/rsyscall/_native/rsyscall-*
+
+# the HTML API reference built by `make docs` (published by the docs workflow)
+/site/

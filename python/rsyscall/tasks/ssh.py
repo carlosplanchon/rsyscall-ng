@@ -352,7 +352,7 @@ async def make_local_ssh_from_executables(process: Process,
             'HostKey': privkey,
             'AuthorizedKeysFile': pubkey,
             'StrictModes': 'no',
-            'PrintLastLog': 'no',
+            # no PrintLastLog: OpenSSH 10 removed it, and it never applied to non-interactive sessions
             'PrintMotd': 'no',
         })
         ssh_command = ssh.args(

@@ -309,7 +309,7 @@ class Process:
     async def fork(self) -> ChildProcess:
         """Create a new child process
 
-        This is actually implemented as `Thread.clone` with no
+        This is actually implemented as `Process.clone` with no
         arguments. We need the stack-switching ability that clone has.
         """
         return await self.clone()

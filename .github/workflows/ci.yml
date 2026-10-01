@@ -3,7 +3,8 @@
 #   differential  Builds and checks the Rust native side (crate tests, ELF checks) and the upstream
 #                 C oracle, records the test-suite's per-test baseline against each backend and
 #                 requires the two to be identical: the differential test behind the clean-room
-#                 reimplementation (tests/baseline-notes.md).
+#                 reimplementation (tests/baseline-notes.md). It also runs the examples against
+#                 both backends and checks that the API reference builds (docs.yml publishes it).
 #   dist          Builds the abi3 manylinux wheel (auditwheel, abi3audit) and the sdist.
 #   test-dist     Installs the wheel on CPython 3.12, 3.13 and 3.14, and a wheel built from the
 #                 sdist the way pip would, and compares their per-test results with the Rust
@@ -72,6 +73,10 @@ jobs:
         run: |
           make hello
           make hello BACKEND=rust
+      - name: Examples, against both backends
+        run: |
+          make examples
+          make examples BACKEND=rust
       - name: Baselines, one interpreter per test
         run: |
           RSYSCALL_BASELINE_LOGS="$PWD/ci-logs/c" make baseline
@@ -101,6 +106,8 @@ jobs:
           name: baseline-logs
           path: ci-logs/
           if-no-files-found: ignore
+      - name: The API reference builds
+        run: make docs
 
   dist:
     name: Build the wheel and the sdist

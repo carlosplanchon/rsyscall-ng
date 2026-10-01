@@ -7,8 +7,10 @@ import trio
 import outcome
 
 from rsyscall.tests.utils import do_async_things
-from rsyscall.near.sysif import SyscallInterface, Syscall
+from rsyscall.near.sysif import SyscallInterface, Syscall, SyscallHangup
 from rsyscall.sys.syscall import SYS
+from rsyscall.sys.epoll import EPOLL_CTL
+from rsyscall.fcntl import O
 from dneio import RequestQueue, reset, Continuation
 import typing as t
 
@@ -100,3 +102,69 @@ class TestEpoller(TrioTestCase):
         with self.assertRaises(OSError) as cm:
             await async_pipe_rfd.write_all_bytes(b'hi')
         self.assertEqual(cm.exception.errno, 9)
+
+class SwitchableActivityFdSysif(SyscallInterface):
+    """Forward to `sysif`, but report `activity_fd` as the activity fd, which tests can change.
+
+    Setting `lose` to an `(op, fd)` pair makes the next epoll_ctl with that op on that fd lose
+    its response: the call is performed, then raises SyscallHangup, as if the connection broke
+    before the response arrived.
+
+    """
+    def __init__(self, sysif: SyscallInterface) -> None:
+        self.sysif = sysif
+        self.activity_fd = sysif.get_activity_fd()
+        self.lose: t.Optional[t.Tuple[EPOLL_CTL, FileDescriptor]] = None
+        self.lost: t.List[Syscall] = []
+
+    async def syscall(self, number: SYS, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0) -> int:
+        ret = await self.sysif.syscall(number, arg1, arg2, arg3, arg4, arg5, arg6)
+        if (self.lose and number == SYS.epoll_ctl
+                and arg2 == self.lose[0] and int(arg3) == int(self.lose[1].near)):
+            self.lose = None
+            self.lost.append(Syscall(number, arg1, arg2, arg3, arg4, arg5, arg6))
+            raise SyscallHangup()
+        return ret
+
+    async def read(self, src: Pointer) -> bytes:
+        return await self.sysif.read(src)
+
+    async def write(self, dest: Pointer, data: bytes) -> None:
+        await self.sysif.write(dest, data)
+
+    async def barrier(self) -> None:
+        await self.sysif.barrier()
+
+    async def close_interface(self) -> None:
+        await self.sysif.close_interface()
+
+    def get_activity_fd(self) -> t.Optional[FileDescriptor]:
+        return self.activity_fd
+
+class TestActivityFdHangup(TrioTestCase):
+    """A root epoller moves its registration when the activity fd changes, as it does after a
+    persistent process reconnects. A SyscallHangup there is retried like one from epoll_wait,
+    even when the lost call was performed; before, it escaped the epoller's loop and stopped
+    the local event loop."""
+    async def lose_response(self, op: EPOLL_CTL, of_new_fd: bool) -> None:
+        process = await self.process.fork()
+        sysif = SwitchableActivityFdSysif(process.task.sysif)
+        process.task.sysif = sysif
+        epoller = await Epoller.make_root(process.task)
+        await do_async_things(self, epoller, process)
+        # A copy of the syscall socket is readable exactly when the original is.
+        old_fd = sysif.activity_fd
+        placeholder = await process.task.open(await process.ptr("/dev/null"), O.RDONLY)
+        new_fd = await old_fd.dup3(placeholder, O.CLOEXEC)
+        sysif.lose = (op, new_fd if of_new_fd else old_fd)
+        sysif.activity_fd = new_fd
+        # This needs epoll_wait in the child to wake up for each new syscall, so it hangs
+        # unless the new activity fd ends up registered.
+        await do_async_things(self, epoller, process)
+        self.assertEqual(len(sysif.lost), 1)
+
+    async def test_lose_del(self) -> None:
+        await self.lose_response(EPOLL_CTL.DEL, of_new_fd=False)
+
+    async def test_lose_add(self) -> None:
+        await self.lose_response(EPOLL_CTL.ADD, of_new_fd=True)

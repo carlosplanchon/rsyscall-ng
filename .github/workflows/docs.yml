@@ -1,0 +1,66 @@
+# Publishes the HTML API reference to GitHub Pages: on every release tag, and on demand.
+#
+# scripts/api-docs.py renders it with pdoc from an install of the tagged tree. Two repository
+# settings are needed once: Settings > Pages > Source set to "GitHub Actions", and the
+# github-pages environment allowing the v* tags as well as the default branch. Actions are pinned
+# to commit SHAs, commented with the release they correspond to.
+name: Docs
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false  # let a deployment that has started finish
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build the API reference
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: false
+          python-version: "3.14"
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - name: Install rsyscall-ng from the tree (cargo builds its native side) and pdoc
+        run: |
+          uv venv
+          uv pip install ".[net]" "pdoc>=16,<17"
+      - name: Render the HTML
+        run: .venv/bin/python scripts/api-docs.py site
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -71,6 +71,27 @@ bootstrap helper travels over the same ssh connection. The function passed to
 host or connection sharing can go there. `scripts/hello.py` is the first example
 with more output; `make hello` and the CI run it.
 
+## Documentation
+
+- **API reference**: <https://carlosplanchon.github.io/rsyscall-ng/>, generated
+  from the docstrings with [pdoc](https://pdoc.dev/) for every release. Start
+  with the page of the `rsyscall` package, which links every module, and
+  `rsyscall.doc.syscall_api`, which explains how the system call API is laid out.
+- **Examples**: [`examples/`](https://github.com/carlosplanchon/rsyscall-ng/tree/main/examples) holds runnable scripts, each explained
+  in its docstring:
+  - `sandbox.py`: a shell in new user, mount and PID namespaces, with an empty
+    root built from `mount` and `chroot` calls made before the exec.
+  - `network.py`: a network namespace with only its own loopback, brought up
+    with an ioctl.
+  - `socket_activation.py`: a listening socket handed to a server at fd 3 with
+    `LISTEN_FDS`, as systemd does.
+  - `persistent.py`: a process that outlives its connection, reconnected with
+    its state intact.
+  - `ssh.py`: system calls on another machine over ssh.
+
+From a checkout, `make docs` builds the reference into `site/` and
+`make examples` runs every example and reports PASS, SKIP or FAIL for each.
+
 ## Relation to upstream
 
 Upstream has been dormant since 2022-07-25 and its PyPI package no longer
@@ -106,6 +127,9 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 - [x] continuous integration on GitHub-hosted Ubuntu 24.04 runners: crate
       tests, the differential C-vs-Rust baseline recorded on the runner, and the
       wheel and the sdist tested on CPython 3.12 to 3.14
+- [x] runnable examples (`examples/`), run by `make examples` and the CI against
+      both backends, and an API reference generated with pdoc and published to
+      GitHub Pages for every release
 - [ ] aarch64 (later phase)
 
 ## Layout
@@ -115,8 +139,10 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 | `python/`                  | upstream Python package tree (`rsyscall`, `dneio`, `arepl`, `wish`) |
 | `pyproject.toml`, `setup.py`, `MANIFEST.in` | PEP 517 packaging of `python/` (setuptools + cffi); `setup.py` builds `native/` with cargo and bundles its artefacts |
 | `python/rsyscall/_native/` | `rsyscall._native`: where the bundled `librsyscall.so` and helper executables live, and how to find them |
-| `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes, CI runner setup |
+| `scripts/`                 | oracle build, venv setup, baseline runner and comparer, smoke test, wheel test, spec checks, black-box probes, CI runner setup, examples runner, API reference generator |
+| `examples/`                | runnable examples; `make examples` runs them all            |
 | `.github/workflows/ci.yml` | the CI workflow, described under "Continuous integration" |
+| `.github/workflows/docs.yml` | builds the API reference with `scripts/api-docs.py` and publishes it to GitHub Pages for every version tag |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
 | `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
 | `native/`                  | clean-room Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
@@ -125,6 +151,7 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 | `reference/` (gitignored)  | pinned upstream clone and the locally built C oracle        |
 | `.venv/`, `.venv-rust/` (gitignored) | the virtualenv of each backend, created by `make venv` |
 | `dist/`, `.venv-wheel/` (gitignored) | wheels and sdists from `make wheel`; the throwaway venv of `make wheel-test` |
+| `site/` (gitignored)       | the HTML API reference built by `make docs`                 |
 
 ## Quick start
 
@@ -224,11 +251,13 @@ installs autotools and the OpenSSH server and lifts Ubuntu's AppArmor
 restriction on unprivileged user namespaces, which the test-suite creates.
 
 - **differential** runs the crate tests, builds the Rust native side with its
-  ELF checks and the C oracle, runs the specification checks and the smoke
-  tests, and records both baselines on the runner. It fails unless the two are
-  identical. Differences from the committed baselines are only warnings,
-  because a few tests depend on the machine; the recorded baselines and the
-  per-test logs are uploaded as artifacts.
+  ELF checks and the C oracle, runs the specification checks, the smoke tests
+  and the examples against both backends, and records both baselines on the
+  runner. It fails unless the two are identical. Differences from the committed
+  baselines are only warnings, because a few tests depend on the machine; the
+  recorded baselines and the per-test logs are uploaded as artifacts. Last, it
+  builds the API reference, so a docstring that pdoc cannot render fails the
+  job.
 - **dist** builds the manylinux abi3 wheel, checked by auditwheel and
   abi3audit, and the sdist, and uploads them as the `dist` artifact.
 - **test-dist** installs the wheel on CPython 3.12, 3.13 and 3.14, and a wheel

@@ -11,6 +11,10 @@ import os
 from importlib.resources import files
 from pathlib import Path
 
+# The public names; it also keeps librsyscall.so, which is not a Python module, out of tools
+# that look for submodules (pdoc).
+__all__ = ["HELPERS", "bundled_dir", "libexec_dir", "helper", "library_path"]
+
 HELPERS = ("rsyscall-bootstrap", "rsyscall-stdin-bootstrap", "rsyscall-unix-stub")
 "The helper executables of bootstrap-handshakes.md, in the order of the specification"
 

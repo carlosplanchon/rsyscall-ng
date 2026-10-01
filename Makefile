@@ -1,7 +1,7 @@
 SHELL := bash
 BACKEND ?= c
 export BACKEND
-.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test probe probe-diff spec-check wheel wheel-manylinux wheel-test sdist sdist-test clean-venv clean-reference clean-native clean-dist
+.PHONY: help oracle native native-test venv preflight hello baseline baseline-diff test examples docs probe probe-diff spec-check wheel wheel-manylinux wheel-test sdist sdist-test clean-venv clean-reference clean-native clean-dist
 
 help:
 	@echo "targets (BACKEND=c|rust selects the native implementation; default c):"
@@ -14,6 +14,8 @@ help:
 	@echo "  baseline         run the suite, one interpreter per test, and write tests/baseline-<backend>.txt"
 	@echo "  baseline-diff    compare tests/baseline-c.txt with tests/baseline-rust.txt (header line ignored)"
 	@echo "  test             run pytest; pass arguments with PYTEST_ARGS='...'"
+	@echo "  examples         run every script in examples/ with the backend's venv; PASS, SKIP or FAIL each"
+	@echo "  docs             build the HTML API reference into site/ with pdoc (installed into the backend's venv)"
 	@echo "  probe            run the black-box probes against the backend's helper executables"
 	@echo "  probe-diff       run the probes against both backends and diff the normalised output"
 	@echo "  spec-check       verify docs/spec: generated layouts and vectors are current, citations valid"
@@ -54,6 +56,12 @@ baseline-diff:
 
 test: preflight
 	source scripts/env.sh && "$$PY" -m pytest $(PYTEST_ARGS)
+
+examples: preflight
+	source scripts/env.sh && "$$PY" scripts/run-examples.py "$$PY"
+
+docs: preflight
+	source scripts/env.sh && uv pip install --quiet --python "$$PY" "pdoc>=16,<17" && rm -rf site && "$$PY" scripts/api-docs.py site
 
 probe:
 	source scripts/env.sh && for m in stdin stub stublong bootstrap; do python3 scripts/probes/probe_oracle.py "$$PREFIX/libexec/rsyscall" $$m; done

@@ -13,7 +13,7 @@ if t.TYPE_CHECKING:
     from rsyscall.sys.mman import MemoryMapping
 
 __all__ = [
-    "RAM",
+    "RAMTask",
 ]
 
 class BytesSerializer(Serializer[bytes]):

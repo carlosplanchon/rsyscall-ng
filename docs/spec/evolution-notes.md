@@ -109,6 +109,28 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
 - `pyroute2` is imported (`python/rsyscall/linux/rtnetlink.py:2`) but was not declared as a
   dependency by the upstream `setup.py`; only the optional `test_net.py` notices. Since the
   packaging step the repository's `pyproject.toml` declares it as the optional extra `net`.
+- The loop of a root epoller retried a `SyscallHangup` from `epoll_wait`, but not one from the
+  `epoll_ctl` calls that move the registration of the activity fd to the connection made by a
+  reconnection (`python/rsyscall/epoller.py:166-192`). The loop makes those calls lazily, once
+  the previous `epoll_wait` returns, so they can still be in flight when the client asks the
+  persistent process to `exit`. The hangup then escaped the loop into the coroutine that
+  delivered it, the connection's response reader, and on through the local epoller into the
+  trio system task that drives it, which stopped; the client hung. `examples/persistent.py`
+  hung in 2 of 100 runs with the C oracle and 0 of 100 with the Rust side. The loop now retries
+  those calls too, and counts a retried `DEL` that fails with `ENOENT`, or a retried `ADD` that
+  fails with `EEXIST`, as done; `python/rsyscall/tests/test_epoller.py` loses each response on
+  purpose (`TestActivityFdHangup`). The requests a server receives are unchanged.
+- `Allocation.free` returns the whole pages that a freed allocation leaves empty with
+  `MADV_REMOVE`, a request sent through the freeing task's connection without waiting for it
+  (`python/rsyscall/memory/allocator.py:171-205`). Every task in an address space shares the
+  allocator, and its finger allocates right next to the freed allocation, so until that request
+  ran another task, the local interpreter for one, could allocate in those pages and write there,
+  and the request then deleted the data. Syscall responses read into such a buffer came back as
+  zero, which surfaced as `RuntimeError: somehow got a partial recv with MSG.WAITALL` (or `partial
+  send`) or as a hang. The five tests that give a child a root epoller (`test_clone.py`,
+  `test_epoller.py`) failed in 5 of 60 runs with the C oracle. The freed allocation now stretches
+  over those pages until the request completes, so nothing is allocated there meanwhile, and they
+  failed in none of 60; the pages are still returned with `MADV_REMOVE`.
 
 ## Oracle gaps
 

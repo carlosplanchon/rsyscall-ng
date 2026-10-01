@@ -378,7 +378,7 @@ class FileDescriptorTask(rsyscall.far.Task, t.Generic[T_fd]):
         The `FileDescriptor`s for the task will still be referencing the same file,
         through different file descriptors, which happen to have the same file descriptor *numbers*,
         in a new file descriptor table.
-        Since the file descriptor numbers do not change, `near.FileDescriptor` will not change either,
+        Since the file descriptor numbers do not change, `rsyscall.near.FileDescriptor` will not change either,
         and no actual change is required in the `FileDescriptor`s.
 
         """

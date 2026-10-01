@@ -49,6 +49,8 @@ already have a signing key configured with GitHub, please use it.
   make native-test      # the Rust crate's own tests
   make spec-check       # docs/spec: generated tables and vectors, citations
   make test             # the test-suite against the C oracle (BACKEND=rust for the Rust side)
+  make examples         # every script in examples/ (BACKEND=rust as well)
+  make docs             # the API reference in site/, if you touched docstrings
   ```
 
 - If your change can alter test results, record both baselines and compare them. The CI requires
