@@ -66,10 +66,12 @@ trio.run(main)
 
 `worker` is any x86_64 Linux machine you can reach with `ssh worker` that has a
 POSIX shell and GNU coreutils. Nothing has to be installed there: a small static
-bootstrap helper travels over the same ssh connection. The function passed to
-`make_ssh_host` extends the `ssh` command line, so ssh options such as a jump
-host or connection sharing can go there. `scripts/hello.py` is the first example
-with more output; `make hello` and the CI run it.
+bootstrap helper travels over the same ssh connection. The helper is deleted as
+soon as it runs, and the connection's other temporary files, on both machines,
+once no process can use them; that cleanup reads `/proc/net/unix`. The function
+passed to `make_ssh_host` extends the `ssh` command line, so ssh options such as
+a jump host or connection sharing can go there. `scripts/hello.py` is the first
+example with more output; `make hello` and the CI run it.
 
 ## Documentation
 

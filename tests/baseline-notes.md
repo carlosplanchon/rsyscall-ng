@@ -11,11 +11,12 @@ unprivileged user with unprivileged user namespaces enabled and `/dev/fuse` and 
 world-accessible. The C and the Rust recordings are identical apart from the header's backend
 field. (First recorded on 2026-09-28 with the core modules only; the helper tests and then
 `test_net.py` joined on 2026-09-30, and the failures listed under "Fixed failures" were fixed;
-the two `TestActivityFdHangup` tests of `test_epoller.py` joined on 2026-10-01.)
+the two `TestActivityFdHangup` tests of `test_epoller.py` and the eight tests of the ssh
+temporary-file cleanup in `test_ssh.py` joined on 2026-10-01.)
 
 | Status | Count |
 |--------|-------|
-| PASS   | 104   |
+| PASS   | 112   |
 | SKIP   | 2     |
 | FAIL   | 0     |
 | ERROR  | 0     |
@@ -132,7 +133,13 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   only because its client happened to be at another phase of the epoll loop when it shut the
   connection down. `SyscallConnection.infallible_send` now requests the `sendto` with
   `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`), which servers execute verbatim.
-- Collection yields 106 tests on this machine: 73 from the core modules (71 `def test_`
+- Collection yields 114 tests on this machine: 73 from the core modules (71 `def test_`
   functions, plus two because `test_clone.py` defines two classes that inherit the same test
-  methods) and 33 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
-  `test_ssh.py` (9), `test_fuse.py` (2) and `test_net.py` (8).
+  methods) and 41 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
+  `test_ssh.py` (17), `test_fuse.py` (2) and `test_net.py` (8).
+- Every ssh connection starts a janitor on each host that removes its temporary files once
+  unused (`rsyscall/tasks/ssh.py`). The janitors run in sessions of their own, so they outlive
+  the `killpg` of `scripts/pytest_session.py` on purpose. They hold no file descriptor but
+  `/dev/null`, so they keep no pipe open, and each exits a few seconds after the socket it
+  watches is gone: at most about a minute after its test, when the forwarding ssh's
+  `sleep 60` ends.

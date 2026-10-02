@@ -251,8 +251,8 @@ async def ssh_bootstrap(
     bootstrap_child_pid = await bootstrap_process.exec(ssh_command.args(
         "-n", f"cd {tmp_path_bytes.decode()}; exec ./bootstrap rsyscall"
     ))
-    # TODO should unlink the bootstrap after I'm done execing.
-    # it would be better if sh supported fexecve, then I could unlink it before I exec...
+    # The bootstrap executable is unlinked once the describe has been read, and the other
+    # temporary files once nothing can use them: see _arrange_cleanup at the end of this file.
     # Connect to local socket 4 times
     async def make_async_connection() -> AsyncFileDescriptor:
         sock = await parent.make_afd(await parent.socket(AF.UNIX, SOCK.STREAM|SOCK.NONBLOCK))
@@ -308,7 +308,7 @@ async def ssh_bootstrap(
         stdout=new_base_task.make_fd_handle(near.FileDescriptor(1)),
         stderr=new_base_task.make_fd_handle(near.FileDescriptor(2)),
     )
-    return bootstrap_child_pid, new_process
+    return bootstrap_child_pid, await _arrange_cleanup(parent, new_process, handle_listening_fd, local_socket_path, tmp_path_bytes)
 
 @dataclass
 class SSHDExecutables:
@@ -394,3 +394,166 @@ async def which_with_sbin(process: Process, name: str) -> Command:
 # Historical spellings, from when the executables were deployed from Nix closures (rsyscall._nixdeps).
 SSHExecutables.with_nix = SSHExecutables.find  # type: ignore[attr-defined]
 SSHDExecutables.with_nix = SSHDExecutables.find  # type: ignore[attr-defined]
+
+# Cleanup of the bootstrap's temporary files. This code, imports included, sits at the end of the
+# module because docs/spec cites line numbers of this file, and appending moves none of them.
+import trio
+from rsyscall.fcntl import FD, _fcntl
+from rsyscall.linux.dirent import DirentList
+from rsyscall.sys.stat import Stat
+
+_JANITOR_MAX_INTERVAL = 10
+"The longest pause, in seconds, between two checks of a janitor; the tests lower it"
+
+_JANITOR_SH = r"""# rsyscall ssh janitor; see _start_janitor in rsyscall/tasks/ssh.py
+# usage: sh -c SCRIPT NAME MODE KEY DIR MAX FILE...
+# MODE inode: KEY is the inode of a Unix socket; MODE name: KEY ends the socket's path.
+# Once no such socket is listed in /proc/net/unix, remove FILE..., then wait until no process
+# has DIR (if not empty) as its working directory and rmdir it, which only succeeds if empty.
+mode=$1 key=$2 dir=$3 max=$4
+shift 4
+listed() {  # 0: listed, 1: not listed, 2: cannot tell
+    t=$(cat /proc/net/unix) || return 2
+    case $t in "Num "*) ;; *) return 2 ;; esac
+    case $mode in
+    inode) case "$t
+" in *" $key "* | *" $key
+"*) return 0 ;; esac ;;
+    name) case "$t
+" in *"/$key
+"*) return 0 ;; esac ;;
+    *) return 2 ;;
+    esac
+    return 1
+}
+cwd_in_use() {  # 1 only when no visible process has DIR as its working directory
+    s=$(stat -L -c %d:%i /proc/[0-9]*/cwd 2>/dev/null)
+    [ -n "$s" ] || return 0
+    case "
+$s
+" in *"
+$id
+"*) return 0 ;; esac
+    return 1
+}
+nap() {  # 1, 2, 4... up to MAX seconds; after HUP or TERM, 1 s at a time and give up after 6
+    if [ "$left" -ge 0 ]; then
+        [ "$left" -gt 0 ] || exit 0
+        left=$((left - 1))
+        sleep 1
+    else
+        sleep "$pause"
+        pause=$((pause * 2))
+        [ "$pause" -le "$max" ] || pause=$max
+    fi
+}
+command -v sleep >/dev/null 2>&1 || exit 5
+listed || { sleep 1; listed; } || exit $((2 + $?))
+(
+    left=-1 pause=1 gone=0
+    trap 'left=6' HUP TERM
+    while [ "$gone" -lt 3 ]; do
+        if [ "$gone" -gt 0 ]; then sleep 1; else nap; fi
+        listed
+        case $? in 1) gone=$((gone + 1)) ;; *) gone=0 ;; esac
+    done
+    rm -f -- "$@"
+    [ -n "$dir" ] || exit 0
+    id=$(stat -c %d:%i -- "$dir") || exit 0
+    pause=1
+    while cwd_in_use; do nap; done
+    rmdir -- "$dir"
+) &
+"""
+"The janitor started by _start_janitor: POSIX sh plus cat, sleep, stat, rm and rmdir"
+
+async def _arrange_cleanup(parent: Process, process: Process, listening_fd: FileDescriptor,
+                           local_socket_path: Path, tmp_path_bytes: bytes) -> Process:
+    """Remove the bootstrap's temporary files once nothing can use them; return `process`
+
+    ssh_bootstrap leaves three files behind. On the remote host, in the directory made by
+    ssh_bootstrap.sh: the bootstrap executable, needed only until stage 3 has execed it, and the
+    listening socket `data`, which sshd connects to for every new channel of `process` and of
+    everything that inherits its connection. On the access host, where `parent` runs: the socket
+    the forwarding ssh listens on, which every new channel connects to. So the executable goes
+    now, and each socket goes once no process holds its listener any more: a janitor
+    (`_JANITOR_SH`), started detached on each host by `_start_janitor`, watches /proc/net/unix for
+    that, removes the files, and removes the directory once it is empty and no process uses it as
+    its working directory. This is best effort: a failure is logged and never fails ssh().
+
+    """
+    tmp_dir = os.fsdecode(tmp_path_bytes)
+    if not tmp_dir.startswith("/") or tmp_dir == "/" or "\n" in tmp_dir:
+        logger.warning("not cleaning up an unexpected bootstrap directory %r", tmp_dir)
+        return process
+    remote_dir = Path(tmp_dir)
+    try:
+        await process.task.unlink(await process.ptr(remote_dir/"bootstrap"))
+    except Exception:
+        logger.debug("could not unlink %s", remote_dir/"bootstrap", exc_info=True)
+    try:
+        stat = await (await listening_fd.fstat(await process.task.malloc(Stat))).read()
+        await _start_janitor(process, "inode", str(stat.ino),
+                             [remote_dir/"data", remote_dir/"bootstrap"], remote_dir)
+    except Exception:
+        logger.warning("could not arrange the removal of %s", remote_dir, exc_info=True)
+    if local_socket_path.is_absolute():
+        try:
+            await _start_janitor(parent, "name", local_socket_path.name, [local_socket_path])
+        except Exception:
+            logger.warning("could not arrange the removal of %s", local_socket_path, exc_info=True)
+    return process
+
+async def _start_janitor(process: Process, mode: str, key: str,
+                         files: t.Sequence[t.Union[str, os.PathLike]],
+                         directory: t.Union[str, os.PathLike] = "",
+                         max_interval: t.Optional[int] = None) -> bool:
+    """Start `_JANITOR_SH` detached on the host of `process`; return whether it is watching
+
+    The janitor runs in a session of its own, from /, with /dev/null as its stdio and no other
+    file descriptor, so it keeps no listener, pipe or directory alive, and it survives the end of
+    the session and process group it was started from. Its first `sh` exits as soon as the loop
+    is running in the background, so waiting for it leaves no zombie.
+
+    """
+    child = await process.fork()
+    async with child.pid:  # kills and reaps the child if anything below fails
+        await child.task.setsid()
+        await child.task.chdir(await child.ptr(Path("/")))
+        null = await child.task.open(await child.ptr(Path("/dev/null")), O.RDWR)
+        for std in (child.stdin, child.stdout, child.stderr):
+            await null.dup2(std)
+        await _cloexec_above_stderr(child)
+        janitor = await child.exec(child.environ.sh.args(
+            "-c", _JANITOR_SH, "rsyscall-ssh-janitor", mode, key, os.fspath(directory),
+            str(max_interval or _JANITOR_MAX_INTERVAL), *[os.fspath(f) for f in files]))
+        state = await janitor.waitpid(W.EXITED)
+    if not state.clean():
+        # status 3: the socket is not listed in /proc/net/unix; 4: that file is unreadable;
+        # 5: no sleep command
+        logger.info("not removing %s: the janitor exited with %s", [os.fspath(f) for f in files], state)
+    return state.clean()
+
+async def _cloexec_above_stderr(process: Process) -> None:
+    "Set FD_CLOEXEC on every file descriptor of `process` above 2, so that exec keeps only stdio"
+    buf = await process.task.malloc(DirentList, 4096)
+    dirfd = await process.task.open(await process.ptr(Path("/proc/self/fd")), O.DIRECTORY)
+    async def cloexec(number: int) -> None:
+        try:
+            await _fcntl(process.task.sysif, near.FileDescriptor(number), F.SETFD, FD.CLOEXEC)
+        except OSError:
+            pass  # closed in the meantime
+    async with trio.open_nursery() as nursery:
+        while True:
+            valid, rest = await dirfd.getdents(buf)
+            if valid.size() == 0:
+                break
+            for dent in await valid.read():
+                try:
+                    number = int(dent.name)
+                except ValueError:
+                    continue
+                if number > 2:
+                    nursery.start_soon(cloexec, number)
+            buf = valid.merge(rest)
+    await dirfd.close()

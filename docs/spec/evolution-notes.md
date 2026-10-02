@@ -131,6 +131,18 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
   `test_epoller.py`) failed in 5 of 60 runs with the C oracle. The freed allocation now stretches
   over those pages until the request completes, so nothing is allocated there meanwhile, and they
   failed in none of 60; the pages are still returned with `MADV_REMOVE`.
+- Every `SSHHost.ssh` left the bootstrap's temporary files behind for good
+  (`python/rsyscall/tasks/ssh.py:149-163`). On the remote host that was the directory made by
+  `ssh_bootstrap.sh`, holding a copy of `rsyscall-bootstrap` and the listening socket `data`. On
+  the access host it was the socket the forwarding `ssh -L` listens on. Both sockets serve every
+  later channel of the remote process tree, so they can only go once nothing holds their
+  listeners. The client now unlinks the executable as soon as the describe has been read
+  (`python/rsyscall/tasks/ssh.py:311`). It also starts a detached janitor on each host, a short
+  `sh` script appended to the same file, that removes the sockets once their listeners are no
+  longer listed in `/proc/net/unix`, and the remote directory once it is empty and no process uses
+  it as its working directory. `ssh_bootstrap.sh`, the commands quoted in
+  `bootstrap-handshakes.md` §2 and the wire format are unchanged, and remote processes still start
+  in the temporary directory.
 
 ## Oracle gaps
 

@@ -1,6 +1,6 @@
 # rsyscall test baseline. Format: <STATUS> <pytest nodeid> [ # <exception class>]
 # backend=rust python=3.14 trio=0.34.0 pytest=9.1.1 isolation=one-process-per-test timeout=60s
-# 106 entries: PASS=104, SKIP=2, XFAIL=0, XPASS=0, FAIL=0, ERROR=0
+# 114 entries: PASS=112, SKIP=2, XFAIL=0, XPASS=0, FAIL=0, ERROR=0
 # collect_ignore=test_nix.py (needs a Nix store and the rsyscall._nixdeps closures)
 PASS python/rsyscall/tests/test_allocator.py::TestMisc::test_madvise
 PASS python/rsyscall/tests/test_benchmark.py::TestBenchmark::test_bench
@@ -96,10 +96,18 @@ PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_connection_multiple_channe
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_copy
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_exec_pipe
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_exec_true
+PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_local_socket_reclaimed
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_nest
 SKIP python/rsyscall/tests/test_ssh.py::TestSSH::test_nix_deploy
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_read
 PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_sigmask_bug
+PASS python/rsyscall/tests/test_ssh.py::TestSSH::test_temp_files_reclaimed
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_detached
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_inode
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_keeps_other_files
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_name
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_not_listed
+PASS python/rsyscall/tests/test_ssh.py::TestSSHJanitor::test_waits_for_cwd
 PASS python/rsyscall/tests/test_stdinboot.py::TestStdinboot::test_async
 PASS python/rsyscall/tests/test_stdinboot.py::TestStdinboot::test_nest
 PASS python/rsyscall/tests/test_stdinboot.py::TestStdinboot::test_nest_multiple
