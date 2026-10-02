@@ -24,7 +24,8 @@ uv add rsyscall-ng        # or: pip install rsyscall-ng
 ```
 
 Linux x86_64 and CPython 3.12 or newer. The wheel bundles the native side, so
-nothing else is needed.
+nothing else is needed. On any other platform the installation stops with an
+error that says so.
 
 ## What it looks like
 
