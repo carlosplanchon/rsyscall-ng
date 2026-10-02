@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rsyscall-ng"
-version = "0.1.3"
+version = "0.1.4"
 description = "Process-independent, type-safe, low-level interface to Linux system calls: rsyscall modernized, with a clean-room Rust native side"
 readme = "README.md"
 requires-python = ">=3.12"
