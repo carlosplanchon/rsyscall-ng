@@ -65,6 +65,15 @@ class Pid:
         name = type(self).__name__
         return f"{name}({self.near}, parent={self.task})"
 
+class ChildPidError(Exception):
+    "A `ChildPid` cannot be waited on or signalled right now."
+
+class ChildDeadError(ChildPidError):
+    "The child has been reaped: it can't be waited on or signalled anymore, its pid may be reused."
+
+class ChildBusyError(ChildPidError):
+    "The child is being waited on or signalled, or the siginfo of an earlier waitid is unread."
+
 class ChildPid(Pid):
     """A process that is our child, which we can monitor with waitid and safely signal.
 
@@ -94,15 +103,15 @@ class ChildPid(Pid):
     @contextlib.contextmanager
     def borrow(self) -> t.Iterator[None]:
         if self.death_state:
-            raise Exception("child process", self.near, "is no longer alive, so we can't wait on it or kill it")
+            raise ChildDeadError("child process", self.near, "is no longer alive, so we can't wait on it or kill it")
         if self.unread_siginfo:
-            raise Exception("for child process", self.near, "waitid or kill was call "
+            raise ChildBusyError("for child process", self.near, "waitid or kill was call "
                             "before processing the siginfo buffer from an earlier waitid")
         if self.in_use:
             # TODO technically we could have multiple kills happening simultaneously.
             # but indeed, we can't have a kill happen while a wait is happening, nor multiple waits at a time.
             # that would be racy - we might kill the wrong process or wait on the wrong process
-            raise Exception("child process", self.near, "is currently being waited on or killed,"
+            raise ChildBusyError("child process", self.near, "is currently being waited on or killed,"
                             " can't use it a second time")
         self.in_use = True
         try:

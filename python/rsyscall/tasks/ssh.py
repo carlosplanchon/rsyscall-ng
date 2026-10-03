@@ -242,10 +242,10 @@ async def ssh_bootstrap(
     # identify local path
     local_data_addr = await parent.task.ptr(
         await SockaddrUn.from_path(parent, local_socket_path))
-    # start port forwarding; we'll just leak this process, no big deal
-    # TODO we shouldn't leak processes; we should be GCing processes at some point
-    forward_child_pid = await ssh_forward(
-        parent, ssh_command, local_socket_path, (tmp_path_bytes + b"/data").decode())
+    # start port forwarding; the forwarder carries the syscall connections, so it lives as
+    # long as they do, and it is reaped in the background once it exits
+    forward_child_pid = _reap_in_background(await ssh_forward(
+        parent, ssh_command, local_socket_path, (tmp_path_bytes + b"/data").decode()))
     # start bootstrap
     bootstrap_process = await parent.fork()
     bootstrap_child_pid = await bootstrap_process.exec(ssh_command.args(
@@ -401,6 +401,7 @@ import trio
 from rsyscall.fcntl import FD, _fcntl
 from rsyscall.linux.dirent import DirentList
 from rsyscall.sys.stat import Stat
+from dneio import reset
 
 _JANITOR_MAX_INTERVAL = 10
 "The longest pause, in seconds, between two checks of a janitor; the tests lower it"
@@ -557,3 +558,17 @@ async def _cloexec_above_stderr(process: Process) -> None:
                     nursery.start_soon(cloexec, number)
             buf = valid.merge(rest)
     await dirfd.close()
+
+def _reap_in_background(child_pid: AsyncChildPid) -> AsyncChildPid:
+    """Wait for this child in the background, so that it does not stay a zombie once it exits.
+
+    Only for a child that nothing else waits for: two concurrent waits on one child conflict.
+
+    """
+    async def reap() -> None:
+        try:
+            await child_pid.waitpid(W.EXITED)
+        except Exception:
+            logger.debug("couldn't reap %s", child_pid, exc_info=True)
+    reset(reap())
+    return child_pid

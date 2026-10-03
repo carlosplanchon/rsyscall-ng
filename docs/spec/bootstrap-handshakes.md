@@ -60,7 +60,7 @@ sender's. `evolution-notes.md` lists the padding as a candidate change.
 **Received file descriptors.** The syscall socket passed to a server is the remote side of a
 `socketpair` channel and is blocking by construction, because only the access side is switched
 to `O_NONBLOCK` (`python/rsyscall/network/connection.py:137-153`); the receiver MUST NOT make it
-non-blocking (`wire-protocol.md` §1; `python/rsyscall/tasks/connection.py:158-161`). Whether
+non-blocking (`wire-protocol.md` §1; `python/rsyscall/tasks/connection.py:164-167`). Whether
 received fds carry `FD_CLOEXEC` is Unspecified in v0 (Recommended default: receive with
 `MSG_CMSG_CLOEXEC`, as the client itself always does, `python/rsyscall/sys/socket.py:578`). The
 received fd numbers are what the describe struct MUST report (`python/rsyscall/tasks/stdin_bootstrap.py:115`,
@@ -76,13 +76,13 @@ the kernel reported `msg_controllen` 32 for 3 fds and 32 for 4 fds, and the rece
 
 A server started by `Process.clone`/`fork` has no handshake: the client opens one channel, puts the
 remote-side socket into the stack image as both arguments of `rsyscall_server`, and clones
-(`python/rsyscall/tasks/clone.py:105-107`, `python/rsyscall/tasks/clone.py:113-120`,
+(`python/rsyscall/tasks/clone.py:103-105`, `python/rsyscall/tasks/clone.py:107-114`,
 `python/rsyscall/thread.py:276-278`). The pid comes from the return value of `clone`, the
-symbols from the parent's loader (`python/rsyscall/tasks/clone.py:120`, `python/rsyscall/thread.py:278`,
+symbols from the parent's loader (`python/rsyscall/tasks/clone.py:114`, `python/rsyscall/thread.py:278`,
 `python/rsyscall/tasks/local.py:109`), and the connection is
-`SyscallConnection(access_sock, remote_sock_handle)` (`python/rsyscall/tasks/clone.py:157-165`).
+`SyscallConnection(access_sock, remote_sock_handle)` (`python/rsyscall/tasks/clone.py:162-170`).
 Such a server MUST NOT write anything before its first response and MUST NOT expect anything but
-requests (`python/rsyscall/tasks/connection.py:193-259`); everything else is `wire-protocol.md`
+requests (`python/rsyscall/tasks/connection.py:213-291`); everything else is `wire-protocol.md`
 and `native-abi.md` §3 to §6.
 
 ## 2. ssh bootstrap: `rsyscall-bootstrap`
@@ -318,7 +318,7 @@ its connection socket open, and exited 0 on EOF of the syscall socket.
 (`python/rsyscall/tasks/persistent.py:286-288`, `python/rsyscall/sys/socket.py:618`). It then
 clones a child with `CLONE_FILES|CLONE_FS|CLONE_SIGHAND` plus the mandatory flags, whose stack
 image calls `rsyscall_persistent_server(sock, sock, listening_sock)`
-(`python/rsyscall/tasks/persistent.py:289-292`, `python/rsyscall/tasks/clone.py:101-103`). The
+(`python/rsyscall/tasks/persistent.py:289-292`, `python/rsyscall/tasks/clone.py:99-101`). The
 listening socket is blocking; the server MUST NOT change its flags or `bind`/`listen` again
 (`python/rsyscall/tasks/persistent.py:286-288`). Making the process persistent is done by the
 client with ordinary syscalls (`unshare(CLONE_FILES)` and a userspace cloexec sweep, `setsid`,

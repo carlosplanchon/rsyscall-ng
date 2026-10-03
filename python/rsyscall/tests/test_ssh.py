@@ -214,6 +214,16 @@ class TestSSH(TrioTestCase):
         os.kill(forward, signal.SIGTERM)
         await wait_until_gone(sock_path)
 
+    async def test_forwarder_reaped(self) -> None:
+        "The forwarding ssh does not stay a zombie once it has exited"
+        local_child, remote, tmp_dir = await self.ssh_with_quick_janitors()
+        name = os.path.basename(os.fsdecode(remote.connection.access_address.value.path))
+        [forward] = processes_with_argument(f"./{name}:{tmp_dir}/data")
+        await remote.exit(0)
+        await local_child.waitpid(W.EXITED)
+        os.kill(forward, signal.SIGTERM)
+        await wait_until_gone(f"/proc/{forward}", timeout=10)
+
 class TestSSHJanitor(TrioTestCase):
     "The janitor of rsyscall.tasks.ssh, on sockets made here, checking every second"
     async def asyncSetUp(self) -> None:

@@ -116,13 +116,35 @@ class Environment:
                  arglist_ptr: t.Optional[WrittenPointer[ArgList]]=None,
     ) -> None:
         self.task = task
-        self.data = environment
+        self._data = environment
         self.sh = Command(Path("/bin/sh"), ['sh'], {})
         "The POSIX-required `/bin/sh`, as a `rsyscall.Command`"
         self.tmpdir = Path(self.get("TMPDIR", "/tmp"))
         "`TMPDIR`, or `/tmp` if it's not set, as a `rsyscall.path.Path`"
         self.path = path
         self.arglist_ptr = arglist_ptr
+
+    @property
+    def data(self) -> t.Dict[str, str]:
+        """The variables, as a dict.
+
+        Change them by assigning to this attribute or with item assignment and deletion,
+        not by mutating the dict in place: only those keep the cached `envp` (used by
+        exec) and the `PATH` lookups of `which` up to date.
+
+        """
+        return self._data
+
+    @data.setter
+    def data(self, environment: t.Dict[str, str]) -> None:
+        self._data = environment
+        self._changed("PATH")
+
+    def _changed(self, key: str) -> None:
+        "Drop what was derived from the variables: the envp array, and the PATH cache if PATH changed."
+        self.arglist_ptr = None
+        if key == "PATH":
+            self.path = ExecutablePathCache(self.task, self._data.get("PATH", "").split(":"))
 
     def __getitem__(self, key: str) -> str:
         return self.data[key]
@@ -134,10 +156,12 @@ class Environment:
         return len(self.data)
 
     def __delitem__(self, key: str) -> None:
-        del self.data[key]
+        del self._data[key]
+        self._changed(key)
 
     def __setitem__(self, key: str, val: str) -> None:
-        self.data[key] = val
+        self._data[key] = val
+        self._changed(key)
 
     def get(self, key: str, default: str) -> str:
         "Like `dict.get`; get an environment variable, with a default."
@@ -148,7 +172,18 @@ class Environment:
             return result
 
     async def which(self, name: str) -> Command:
-        "Locate an executable with this name on `PATH`; throw `ExecutableNotFound` on failure."
+        """Locate an executable with this name on `PATH`; throw `ExecutableNotFound` on failure.
+
+        As with execvp, a name that contains a slash is not looked up on `PATH`: it is a
+        path, relative to the working directory if it is not absolute.
+
+        """
+        if "/" in name:
+            try:
+                await self.task.access(await self.task.ptr(name), OK.X)
+            except OSError:
+                raise ExecutableNotFound(name) from None
+            return Command(Path(name), [name], {})
         if self.task.mountns is not self.path.task.mountns:
             # this inherited ExecutablePathCache is not in the same mountns as us anymore,
             # start doing path lookups ourselves

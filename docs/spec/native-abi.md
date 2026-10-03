@@ -11,7 +11,7 @@ from `abi-layouts.generated.md`; byte images from `vectors/v0.json`.
 v0 is x86-64 LP64 little-endian only. The stack image names the x86-64 argument registers
 (`rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`) and is written with the client's native `ffi`
 (`python/ffibuilder.py:1241-1249`, `python/rsyscall/loader.py:59-79`); the `clone` stack must be
-16-byte aligned "so says Intel" (`python/rsyscall/handle/process.py:265-266`). A conforming
+16-byte aligned "so says Intel" (`python/rsyscall/handle/process.py:274-275`). A conforming
 implementation MUST target x86-64 Linux with 8-byte `long`, `size_t` and pointers and 4-byte
 `int`/`pid_t`, as tabulated in `abi-layouts.generated.md` § "Scalar sizes"
 (`python/ffibuilder.py:1251-1288`).
@@ -101,7 +101,7 @@ result is fed directly to the client's classifier (`python/rsyscall/tasks/local.
 
 The local process issues `clone` with a fresh child stack through this very function
 (`python/rsyscall/tasks/local.py:36-38`, `python/rsyscall/sched.py:139-151`,
-`python/rsyscall/handle/process.py:277-279`). In the child, execution resumes right after the
+`python/rsyscall/handle/process.py:286-288`). In the child, execution resumes right after the
 `syscall` instruction with `rsp` pointing at the stack image, and the child "immediately call[s]
 the ret instruction" to pop the trampoline address (`python/rsyscall/sched.py:61-71`). Therefore
 the instruction following `syscall` in `rsyscall_raw_syscall` MUST be `ret`, and the function
@@ -117,11 +117,11 @@ the stack. These are platform facts, not requirements derived from `python/`.
 
 Declared `int (*const rsyscall_server)(const int infd, const int outfd)` (`python/ffibuilder.py:1237`).
 It MUST implement the server loop of `wire-protocol.md` §3 on `infd`/`outfd`, and MUST return
-when the connection ends as specified in `wire-protocol.md` §10 (`python/rsyscall/tasks/connection.py:110-117`,
+when the connection ends as specified in `wire-protocol.md` §10 (`python/rsyscall/tasks/connection.py:112-123`,
 `python/rsyscall/near/sysif.py:166-178`). Its return value is Unspecified in v0 (Recommended
 default: 0 on EOF, non-zero on a read or write error). It is entered through the trampoline in a
 freshly cloned process with `rdi = rsi = ` the remote-side socket
-(`python/rsyscall/thread.py:276-278`, `python/rsyscall/tasks/clone.py:105-107`), so it MUST
+(`python/rsyscall/thread.py:276-278`, `python/rsyscall/tasks/clone.py:103-105`), so it MUST
 respect the constraints of §9 (`python/rsyscall/tasks/local.py:121-128`).
 
 ### 3.3 `rsyscall_persistent_server(int infd, int outfd, int listensock)`
@@ -139,41 +139,41 @@ is Unspecified in v0 (Recommended default: terminate the process with a non-zero
 
 Declared `void (*const rsyscall_futex_helper)(void *futex_addr)` (`python/ffibuilder.py:1238`),
 but Python never calls it; it only places its address in a stack image
-(`python/ffibuilder.py:1235`, `python/rsyscall/tasks/clone.py:57-60`). The register contract at
+(`python/ffibuilder.py:1235`, `python/rsyscall/tasks/clone.py:55-58`). The register contract at
 entry is therefore fixed by the trampoline arguments, not by the cdef arity: `rdi` = the address of
 the 32-bit futex word (`futex_pointer.near + offsetof(struct futex_node, futex)`) and `rsi` = the
-value the word is expected to hold, which the client sets to 1 (`python/rsyscall/tasks/clone.py:57-60`,
-`python/rsyscall/tasks/clone.py:116`, `python/rsyscall/loader.py:62-77`). The helper MUST read
-both registers and MUST ignore the one-parameter prototype (`python/rsyscall/tasks/clone.py:57-60`).
+value the word is expected to hold, which the client sets to 1 (`python/rsyscall/tasks/clone.py:55-58`,
+`python/rsyscall/tasks/clone.py:110`, `python/rsyscall/loader.py:62-77`). The helper MUST read
+both registers and MUST ignore the one-parameter prototype (`python/rsyscall/tasks/clone.py:55-58`).
 
 The helper is cloned with `CLONE_VM|CLONE_FILES|SIGCHLD` (plus `CLONE_PARENT` when the monitor
-requires it) on its own 4096-byte stack, without `ctid` (`python/rsyscall/tasks/clone.py:61-63`,
+requires it) on its own 4096-byte stack, without `ctid` (`python/rsyscall/tasks/clone.py:59-61`,
 `python/rsyscall/monitor.py:300-302`). The client then waits for it to stop or exit, treats an
 exit as an error ("process internal futex-waiting task died unexpectedly") and, on a stop, sends
 `SIGCONT` and considers the stack reusable ("which indicates the trampoline is done and we can
-deallocate the stack") (`python/rsyscall/tasks/clone.py:64-70`). Hence the helper MUST, in this
-order (`python/rsyscall/tasks/clone.py:42-46`, `python/rsyscall/tasks/clone.py:64-70`):
+deallocate the stack") (`python/rsyscall/tasks/clone.py:62-68`). Hence the helper MUST, in this
+order (`python/rsyscall/tasks/clone.py:40-44`, `python/rsyscall/tasks/clone.py:62-68`):
 
-1. consume its arguments from `rdi` and `rsi` (`python/rsyscall/tasks/clone.py:57-60`);
+1. consume its arguments from `rdi` and `rsi` (`python/rsyscall/tasks/clone.py:55-58`);
 2. stop itself with `SIGSTOP` before touching the futex word, and MUST NOT exit before stopping
-   (`python/rsyscall/tasks/clone.py:66-68`); `SIGSTOP` is required because it cannot be blocked
+   (`python/rsyscall/tasks/clone.py:64-66`); `SIGSTOP` is required because it cannot be blocked
    and the helper inherits the parent's signal mask, in which the client keeps `SIGCHLD` blocked
-   (`python/rsyscall/monitor.py:254`, `python/rsyscall/tasks/clone.py:155`);
+   (`python/rsyscall/monitor.py:254`, `python/rsyscall/tasks/clone.py:160`);
 3. MUST NOT read or write its stack after stopping, since the client may free it once it has seen
-   the stop (`python/rsyscall/tasks/clone.py:64-65`, `python/rsyscall/tasks/clone.py:71`);
-4. after `SIGCONT`, call `futex(addr, FUTEX_WAIT, expected, NULL)` (`python/rsyscall/tasks/clone.py:42-46`,
-   `python/rsyscall/tasks/clone.py:70`);
+   the stop (`python/rsyscall/tasks/clone.py:62-63`, `python/rsyscall/tasks/clone.py:69`);
+4. after `SIGCONT`, call `futex(addr, FUTEX_WAIT, expected, NULL)` (`python/rsyscall/tasks/clone.py:40-44`,
+   `python/rsyscall/tasks/clone.py:68`);
 5. terminate when the wait returns 0 (woken by the kernel's `CLONE_CHILD_CLEARTID` wake, §6) or
    fails with `EAGAIN` (the word no longer holds `expected`), because the client waits for its
-   exit as the signal that the monitored process is gone (`python/rsyscall/tasks/clone.py:44-46`,
-   `python/rsyscall/tasks/clone.py:129-136`).
+   exit as the signal that the monitored process is gone (`python/rsyscall/tasks/clone.py:42-44`,
+   `python/rsyscall/tasks/clone.py:123-130`).
 
 Handling of `EINTR` and of a wake-up after which the word still holds `expected` is Unspecified
 in v0 (Recommended default: re-read the word and wait again while it still equals `expected`;
 this is compatible with step 5 because the kernel clears the word before waking). The exit status
 is Unspecified in v0 (Recommended default: 0). The helper MUST NOT modify shared memory other
 than its own stack and MUST NOT close or otherwise disturb file descriptors, since it shares the
-address space and the fd table with the process it monitors (`python/rsyscall/tasks/clone.py:63`).
+address space and the fd table with the process it monitors (`python/rsyscall/tasks/clone.py:61`).
 
 Rationale: Observed (black-box): the pre-existing `hello.strace` (command in `wire-protocol.md`
 §8) shows the oracle helper doing `tkill(<own pid>, SIGSTOP)`, receiving `SIGCONT` from the
@@ -186,8 +186,8 @@ Declared `void (*const rsyscall_trampoline)(void)` (`python/ffibuilder.py:1239`)
 the first word of every stack image (`python/rsyscall/sched.py:81-82`,
 `python/rsyscall/loader.py:135-137`). Entry state: the new process starts at the instruction after
 `syscall` in the parent's raw-syscall primitive with `rsp` = `child_stack` = the start of the
-image, 16-byte aligned (`python/rsyscall/handle/process.py:265-266`,
-`python/rsyscall/handle/process.py:277`); that primitive executes `ret`, which pops the trampoline
+image, 16-byte aligned (`python/rsyscall/handle/process.py:274-275`,
+`python/rsyscall/handle/process.py:286`); that primitive executes `ret`, which pops the trampoline
 address (`python/rsyscall/sched.py:61-71`). The trampoline therefore begins with `rsp` = image + 8,
 pointing at the `rdi` slot of `struct rsyscall_trampoline_stack` (`python/rsyscall/sched.py:82`,
 `python/ffibuilder.py:1241-1249`).
@@ -197,14 +197,14 @@ The trampoline MUST load `rdi, rsi, rdx, rcx, r8, r9` from image offsets +8, +16
 `python/ffibuilder.py:1241-1249`, `python/rsyscall/sched.py:81-82`), and MUST enter the target as
 a C function with those registers as its first six arguments and an ABI-conformant stack (at the
 target's first instruction `rsp + 8` is a multiple of 16, as after a `call`), because the targets
-are C functions (`python/ffibuilder.py:1236-1238`, `python/rsyscall/handle/process.py:265-266`).
+are C functions (`python/ffibuilder.py:1236-1238`, `python/rsyscall/handle/process.py:274-275`).
 Whether it uses `call` or `push`+`jmp` is implementation-defined. Given the alignment of the image
 start, popping all seven words leaves `rsp` = image + 64, 16-byte aligned, so a `call` from there
-is conformant (`python/rsyscall/handle/process.py:265-266`).
+is conformant (`python/rsyscall/handle/process.py:274-275`).
 
 When the target returns, the process MUST terminate: there is no frame to return to, the client
 expects the process to end only through `exit`/`exec` requests or the end of its server loop
-(`python/rsyscall/sched.py:61-71`, `python/rsyscall/tasks/clone.py:87-98`). The exit status is
+(`python/rsyscall/sched.py:61-71`, `python/rsyscall/tasks/clone.py:85-96`). The exit status is
 Unspecified in v0 (Recommended default: `exit_group(ret & 0xff)` where `ret` is the target's
 `int` return value; a `void` target counts as 0). The trampoline MUST NOT depend on TLS, `errno`,
 or any libc state (§9; `python/rsyscall/tasks/local.py:121-128`).
@@ -238,14 +238,14 @@ every slot as a 64-bit two's-complement value (`python/ffibuilder.py:1242-1247`)
 
 Placement: the image is written at the end of a 4096-byte allocation with 16-byte alignment, so up
 to 15 unwritten bytes MAY lie above the image and the allocation extends 4096 - 64 - slack bytes
-below it (`python/rsyscall/tasks/clone.py:114-115`, `python/rsyscall/tasks/clone.py:61-62`,
+below it (`python/rsyscall/tasks/clone.py:108-109`, `python/rsyscall/tasks/clone.py:59-60`,
 `python/rsyscall/handle/pointer.py:228-254`). The client checks that the allocation ends exactly
 where the image starts and that the image address is a multiple of 16
-(`python/rsyscall/handle/process.py:265-271`). Trampoline-entered code MUST fit its stack usage
+(`python/rsyscall/handle/process.py:274-280`). Trampoline-entered code MUST fit its stack usage
 into the bytes below the image: at most 4032 bytes are usable and at least 4017 are guaranteed,
-with no guard page (`python/rsyscall/tasks/clone.py:114`, `python/rsyscall/handle/pointer.py:236-237`,
+with no guard page (`python/rsyscall/tasks/clone.py:108`, `python/rsyscall/handle/pointer.py:236-237`,
 `python/rsyscall/memory/ram.py:132`). Implementations SHOULD stay well under 2 KiB of peak stack
-usage (`python/rsyscall/tasks/clone.py:114`).
+usage (`python/rsyscall/tasks/clone.py:108`).
 
 Byte image for `rsyscall_server(7, 7)` with the trampoline at `0x7f0000002000` and the server at
 `0x7f0000001000` (vectors `stack_image`, `trampoline_stack`):
@@ -266,29 +266,29 @@ Byte image for `rsyscall_server(7, 7)` with the trampoline at `0x7f0000002000` a
 The client issues the raw `clone` syscall with the argument order `(flags, child_stack, ptid, ctid, newtls)`,
 passing 0 for any pointer it does not supply (`python/rsyscall/sched.py:139-151`). Native code
 MUST be prepared to be started by exactly this call (`python/rsyscall/sched.py:151`,
-`python/rsyscall/handle/process.py:277-279`):
+`python/rsyscall/handle/process.py:286-288`):
 
 | argument | value | source |
 |---|---|---|
-| `flags` | caller flags `|` `CLONE_VM` `|` `CLONE_CHILD_CLEARTID` `|` `SIGCHLD`, plus `CLONE_PARENT` when the cloning task is not the monitoring task | `python/rsyscall/tasks/clone.py:101-103`, `python/rsyscall/monitor.py:300-302` |
-| `child_stack` | address of the stack image (§4), 16-byte aligned | `python/rsyscall/handle/process.py:265-266`, `python/rsyscall/handle/process.py:277` |
+| `flags` | caller flags `|` `CLONE_VM` `|` `CLONE_CHILD_CLEARTID` `|` `SIGCHLD`, plus `CLONE_PARENT` when the cloning task is not the monitoring task | `python/rsyscall/tasks/clone.py:99-101`, `python/rsyscall/monitor.py:300-302` |
+| `child_stack` | address of the stack image (§4), 16-byte aligned | `python/rsyscall/handle/process.py:274-275`, `python/rsyscall/handle/process.py:286` |
 | `ptid` | 0 | `python/rsyscall/monitor.py:302`, `python/rsyscall/sched.py:145-146` |
-| `ctid` | address of the `FutexNode` + `offsetof(struct futex_node, futex)` (= node + 8) | `python/rsyscall/handle/process.py:277-279`, `python/rsyscall/tasks/clone.py:120` |
+| `ctid` | address of the `FutexNode` + `offsetof(struct futex_node, futex)` (= node + 8) | `python/rsyscall/handle/process.py:286-288`, `python/rsyscall/tasks/clone.py:114` |
 | `newtls` | 0, so no TLS is set up for the child | `python/rsyscall/monitor.py:302`, `python/rsyscall/sched.py:149-150` |
 
 `CLONE_VM` and `CLONE_CHILD_CLEARTID` are always present ("These flags are mandatory",
-`python/rsyscall/tasks/clone.py:101-103`). The caller MAY add sharing flags such as `CLONE_FILES`
+`python/rsyscall/tasks/clone.py:99-101`). The caller MAY add sharing flags such as `CLONE_FILES`
 (the default child of `Process.clone` is unshared, a `CLONE.FILES` child shares the fd table) or
 namespace flags such as `CLONE_NEWPID`/`CLONE_NEWUSER`, so the server MUST work both with a shared
-and with a copied fd table (`python/rsyscall/thread.py:271-278`, `python/rsyscall/tasks/clone.py:145-148`,
-`python/rsyscall/tests/test_clone.py:14`). The persistent server is cloned with
+and with a copied fd table (`python/rsyscall/thread.py:271-278`, `python/rsyscall/tasks/clone.py:150-153`,
+`python/rsyscall/tests/test_clone.py:18`). The persistent server is cloned with
 `CLONE_FILES|CLONE_FS|CLONE_SIGHAND` plus the mandatory flags (`python/rsyscall/tasks/persistent.py:291`).
 
 The server child MUST be cloned before its futex helper, and the client relies on that order for
-`unshare(NEWPID)` and `ns_last_pid` manipulation (`python/rsyscall/tasks/clone.py:117-120`,
-`python/rsyscall/tasks/clone.py:128`). The helper's own `clone` uses `CLONE_VM|CLONE_FILES|SIGCHLD`
+`unshare(NEWPID)` and `ns_last_pid` manipulation (`python/rsyscall/tasks/clone.py:111-114`,
+`python/rsyscall/tasks/clone.py:122`). The helper's own `clone` uses `CLONE_VM|CLONE_FILES|SIGCHLD`
 (plus `CLONE_PARENT` when required), its own 4096-byte image and no `ctid`
-(`python/rsyscall/tasks/clone.py:61-63`, `python/rsyscall/monitor.py:300-302`). The exact flag
+(`python/rsyscall/tasks/clone.py:59-61`, `python/rsyscall/monitor.py:300-302`). The exact flag
 values are recorded in vector `clone_args`.
 
 Rationale: Observed (black-box): the pre-existing `hello.strace` shows
@@ -301,26 +301,26 @@ followed by `clone(child_stack=0x7f6480e021e0, flags=CLONE_VM|CLONE_FILES|SIGCHL
 Because the server process may share its fd table with others, the client cannot rely on the
 remote socket being closed when the process exits or execs; instead it uses the `ctid` futex: the
 kernel clears the word and wakes a waiter on exit or exec, the helper exits, and the client shuts
-down the access-side socket so its pending reads see EOF (`python/rsyscall/tasks/clone.py:87-98`,
-`python/rsyscall/tasks/clone.py:121-138`). The pieces native code MUST honour
-(`python/rsyscall/tasks/clone.py:116`, `python/rsyscall/tasks/clone.py:128-136`):
+down the access-side socket so its pending reads see EOF (`python/rsyscall/tasks/clone.py:85-96`,
+`python/rsyscall/tasks/clone.py:115-143`). The pieces native code MUST honour
+(`python/rsyscall/tasks/clone.py:110`, `python/rsyscall/tasks/clone.py:122-130`):
 
 | element | value | source |
 |---|---|---|
-| `FutexNode` written before `clone` | `next = NULL`, `futex = 1`, 4 bytes of zero tail padding (vector `futex_node`) | `python/rsyscall/tasks/clone.py:116`, `python/rsyscall/linux/futex.py:23-32` |
-| `ctid` | address of `futex` inside the node (node + 8) | `python/rsyscall/handle/process.py:277-279` |
-| kernel action | on exit or exec of the child, clear the word and `FUTEX_WAKE` one waiter | `python/rsyscall/tasks/clone.py:92-94` |
-| helper | waits with `futex(addr, FUTEX_WAIT, 1)`, exits when woken (§3.4) | `python/rsyscall/tasks/clone.py:42-46` |
-| client | `waitpid` on the helper, then `shutdown(SHUT_RDWR)` on the access socket | `python/rsyscall/tasks/clone.py:129-138` |
+| `FutexNode` written before `clone` | `next = NULL`, `futex = 1`, 4 bytes of zero tail padding (vector `futex_node`) | `python/rsyscall/tasks/clone.py:110`, `python/rsyscall/linux/futex.py:23-32` |
+| `ctid` | address of `futex` inside the node (node + 8) | `python/rsyscall/handle/process.py:286-288` |
+| kernel action | on exit or exec of the child, clear the word and `FUTEX_WAKE` one waiter | `python/rsyscall/tasks/clone.py:90-92` |
+| helper | waits with `futex(addr, FUTEX_WAIT, 1)`, exits when woken (§3.4) | `python/rsyscall/tasks/clone.py:40-44` |
+| client | `waitpid` on the helper, then `shutdown(SHUT_RDWR)` on the access socket, closed once epoll has reported the hangup | `python/rsyscall/tasks/clone.py:123-143` |
 
 The server MUST NOT write to the futex word or wake the futex itself; the only legitimate wake
-is the kernel's on exit or exec (`python/rsyscall/tasks/clone.py:92-98`). The stack image, its
+is the kernel's on exit or exec (`python/rsyscall/tasks/clone.py:90-96`). The stack image, its
 allocation and the futex node are freed by the client once the process has died or exec'd
-(`python/rsyscall/handle/process.py:200-215`), so native code MUST NOT use them after an `exec`
+(`python/rsyscall/handle/process.py:209-224`), so native code MUST NOT use them after an `exec`
 request has been issued (the process image is gone anyway) and MUST NOT expect them to survive its
-own exit (`python/rsyscall/handle/process.py:200-207`). The helper's stack is currently never
+own exit (`python/rsyscall/handle/process.py:209-216`). The helper's stack is currently never
 freed ("TODO uh we need to actually call something to free the stack",
-`python/rsyscall/tasks/clone.py:71`), but the helper MUST NOT rely on that (§3.4).
+`python/rsyscall/tasks/clone.py:69`), but the helper MUST NOT rely on that (§3.4).
 
 Rationale: `next = NULL` rather than a pointer back to a list head means the node is not a valid
 robust list; the client notes that the kernel would `EFAULT` when walking it and therefore never
@@ -335,11 +335,10 @@ The client allocates everything it hands to native code, stacks, futex nodes and
 arguments alike, from one 4 GiB `mmap(PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS)` arena per
 bootstrapped or local process (`python/rsyscall/memory/allocator.py:293-298`,
 `python/rsyscall/memory/allocator.py:332-334`, `python/rsyscall/sys/mman.py:87-93`), inherited by
-clones (`python/rsyscall/tasks/clone.py:166`); allocations use alignment 1 and no guard pages
+clones (`python/rsyscall/tasks/clone.py:171`); allocations use alignment 1 and no guard pages
 (`python/rsyscall/memory/ram.py:132`), and freed pages are returned with `MADV_REMOVE`
 (`python/rsyscall/memory/allocator.py:171-205`), so memory freed by the client may read as zero or
-be repurposed at any later time. An additional 8 KiB `MAP_SHARED` mapping is created per clone but
-never used (`python/rsyscall/tasks/clone.py:108-111`).
+be repurposed at any later time.
 
 ## 8. `struct rsyscall_symbol_table`
 
@@ -369,22 +368,22 @@ environment "lacking TLS for one" (`python/rsyscall/tasks/local.py:121-128`,
 call libc functions that do (`python/rsyscall/tasks/local.py:121-128`).
 
 The stack budget is the client's 4096-byte allocation minus the 64-byte image and up to 15 bytes
-of alignment slack, with no guard page (§4; `python/rsyscall/tasks/clone.py:114-115`,
+of alignment slack, with no guard page (§4; `python/rsyscall/tasks/clone.py:108-109`,
 `python/rsyscall/handle/pointer.py:236-237`). Trampoline-entered code MUST NOT exceed it and
 MUST NOT assume a stack overflow would be detected (`python/rsyscall/memory/ram.py:132`).
 
 Signal dispositions and the signal mask are inherited from the parent (the client keeps `SIGCHLD`
 blocked and propagates its tracked mask to the child task, `python/rsyscall/monitor.py:254`,
-`python/rsyscall/tasks/clone.py:155`); handlers installed by the parent may run in the child
+`python/rsyscall/tasks/clone.py:160`); handlers installed by the parent may run in the child
 (`python/rsyscall/tasks/local.py:121-128`). Native code MUST NOT change signal dispositions or the
 signal mask of the process, since the client tracks and manipulates both itself
-(`python/rsyscall/tasks/clone.py:155`, `python/rsyscall/signal.py:279-288`), and MUST NOT depend
+(`python/rsyscall/tasks/clone.py:160`, `python/rsyscall/signal.py:279-288`), and MUST NOT depend
 on any particular disposition being inherited (`wire-protocol.md` §10 on `SIGPIPE`;
 `python/rsyscall/tasks/persistent.py:16-22`).
 
-The address space is shared with the parent (`CLONE_VM`, `python/rsyscall/tasks/clone.py:101-103`),
+The address space is shared with the parent (`CLONE_VM`, `python/rsyscall/tasks/clone.py:99-101`),
 so native code MUST NOT write outside its own stack, the memory the client told it to write
 (memory writes, `wire-protocol.md` §5) and the results of the syscalls it was asked to perform
 (`python/rsyscall/near/sysif.py:101-111`). It MUST NOT close or modify file descriptors on its own
 initiative, because the fd table may be shared and the client tracks every descriptor
-(`python/rsyscall/tasks/clone.py:145-148`, `python/rsyscall/handle/fd.py:234-247`).
+(`python/rsyscall/tasks/clone.py:150-153`, `python/rsyscall/handle/fd.py:234-247`).

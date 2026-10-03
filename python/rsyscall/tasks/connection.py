@@ -90,6 +90,8 @@ class SyscallConnection(SyscallInterface):
         self.fd = fd
         self.server_fd = server_fd
         self.valid: t.Optional[Pointer[bytes]] = None
+        self.loops_finished = False
+        "Set once a request or response loop has ended; see `_request`."
         self.request_queue = RequestQueue[t.Union[RsyscallSyscall, Write, Read, Barrier], t.Union[int, bytes, None]]()
         reset(self._run_requests())
         self.response_queue = RequestQueue[t.Union[RsyscallSyscall, Read, Barrier], t.Union[int, bytes, None]]()
@@ -113,8 +115,12 @@ class SyscallConnection(SyscallInterface):
         We don't close server_fd, because we don't have any way to close it;
         it was a handle that used this syscall interface, so now it's broken.
 
+        Does nothing if our end is already closed: `rsyscall.tasks.clone` closes it once
+        the process exits or execs, which can happen before exec gets here.
+
         """
-        await self.fd.handle.shutdown(SHUT.RDWR)
+        if self.fd.handle.valid:
+            await self.fd.handle.shutdown(SHUT.RDWR)
 
     async def syscall(self, number: SYS, arg1=0, arg2=0, arg3=0, arg4=0, arg5=0, arg6=0) -> int:
         syscall = RsyscallSyscall(number, arg1, arg2, arg3, arg4, arg5, arg6)
@@ -142,18 +148,18 @@ class SyscallConnection(SyscallInterface):
         if is_running_directly_under_trio():
             with trio.CancelScope(shield=True):
                 # hmm this cancel scope shields the entire thing. unfortunate...
-                return t.cast(int, await self.request_queue.request(syscall))
+                return t.cast(int, await self._request(syscall))
         else:
-            return t.cast(int, await self.request_queue.request(syscall))
+            return t.cast(int, await self._request(syscall))
 
     async def write_to_fd(self, data: bytes) -> None:
         req = Write(data)
         if is_running_directly_under_trio():
             with trio.CancelScope(shield=True):
                 # hmm this cancel scope shields the entire thing. unfortunate...
-                await self.request_queue.request(req)
+                await self._request(req)
         else:
-            await self.request_queue.request(req)
+            await self._request(req)
 
     async def infallible_recv(self, dest: Pointer) -> None:
         received, remaining = await self.server_fd.recv(dest, MSG.WAITALL)
@@ -172,9 +178,9 @@ class SyscallConnection(SyscallInterface):
         if is_running_directly_under_trio():
             with trio.CancelScope(shield=True):
                 # hmm this cancel scope shields the entire thing. unfortunate...
-                return t.cast(bytes, await self.request_queue.request(req))
+                return t.cast(bytes, await self._request(req))
         else:
-            return t.cast(bytes, await self.request_queue.request(req))
+            return t.cast(bytes, await self._request(req))
 
     async def infallible_send(self, src: Pointer) -> None:
         sent, remaining = await self.server_fd.send(to_span(src), MSG.NOSIGNAL)  # a stale send after a reconnect must fail with EPIPE, not kill the server
@@ -188,9 +194,29 @@ class SyscallConnection(SyscallInterface):
         return await read_fut.get()
 
     async def barrier(self) -> None:
-        await self.request_queue.request(Barrier())
+        await self._request(Barrier())
+
+    async def _request(self, req: t.Union[RsyscallSyscall, Write, Read, Barrier]) -> t.Union[int, bytes, None]:
+        """Hand a request to the request loop, unless that loop (or the response loop) has ended.
+
+        The loops only end when they are garbage-collected, which happens once the process
+        is gone and our end of the connection is closed (rsyscall.tasks.clone). The
+        finalizers of objects in that same garbage, such as Pointer.__del__ returning
+        memory, can still make requests; they must fail like any request on a dead
+        connection, not by resuming a finished coroutine.
+
+        """
+        if self.loops_finished:
+            raise SyscallSendError("the syscall connection's loops have ended")
+        return await self.request_queue.request(req)
 
     async def _run_requests(self) -> None:
+        try:
+            await self._run_requests_loop()
+        finally:
+            self.loops_finished = True
+
+    async def _run_requests_loop(self) -> None:
         while True:
             req, coro = await self.request_queue.get_one()
             self.logger.debug("_run_requests: get_one: %s", req)
@@ -226,6 +252,12 @@ class SyscallConnection(SyscallInterface):
                 raise RuntimeError("invalid request", req)
 
     async def _run_responses(self) -> None:
+        try:
+            await self._run_responses_loop()
+        finally:
+            self.loops_finished = True
+
+    async def _run_responses_loop(self) -> None:
         buffer = AsyncReadBuffer(self.fd)
         while True:
             req, cb = await self.response_queue.get_one()

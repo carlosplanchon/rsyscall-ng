@@ -8,6 +8,10 @@ from rsyscall.signal import SIG, Sigset
 from rsyscall.stdlib import mkdtemp
 from rsyscall.sys.signalfd import SignalfdSiginfo
 from rsyscall.sys.wait import CalledProcessError
+import gc
+import os
+import trio
+import typing as t
 
 class TestClone(TrioTestCase):
     async def asyncSetUp(self) -> None:
@@ -100,3 +104,28 @@ class TestCloneUnshareFiles(TrioTestCase):
         epoller = await Epoller.make_root(process.task)
         await do_async_things(self, epoller, process)
         await process.exit(0)
+
+class TestCloneCleanup(TrioTestCase):
+    "What a clone leaves behind in the parent"
+    async def run_true(self) -> None:
+        child = await self.process.fork()
+        await (await child.exec(child.environ.sh.args('-c', 'true'))).check()
+
+    async def resources(self) -> t.Tuple[int, int]:
+        "Our open fds and memory mappings, once rsyscall has closed what it let go of"
+        gc.collect()
+        await self.process.task.run_fd_table_gc()
+        with open("/proc/self/maps") as maps:
+            return len(os.listdir("/proc/self/fd")), sum(1 for _ in maps)
+
+    async def test_exec_leaves_nothing_behind(self) -> None:
+        "Each clone used to leak our end of its syscall connection and an 8 KiB mapping"
+        await self.run_true()
+        fds, mappings = await self.resources()
+        for _ in range(20):
+            await self.run_true()
+        # the socket is closed in the background, once epoll has reported the hangup
+        with trio.fail_after(5):
+            while (await self.resources())[0] > fds:
+                await trio.sleep(0.01)
+        self.assertLess((await self.resources())[1] - mappings, 10)

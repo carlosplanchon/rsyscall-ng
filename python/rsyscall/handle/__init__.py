@@ -29,7 +29,7 @@ import contextlib
 from rsyscall.command import Command
 from rsyscall.handle.fd import FileDescriptorTask, BaseFileDescriptor, FDTable
 from rsyscall.handle.pointer import Pointer, WrittenPointer, ReadablePointer, LinearPointer
-from rsyscall.handle.process import Pid, ChildPid, ProcessPid, PidTask
+from rsyscall.handle.process import Pid, ChildPid, ProcessPid, PidTask, ChildPidError, ChildDeadError, ChildBusyError
 from rsyscall.near.sysif import UnusableSyscallInterface
 from rsyscall.memory.allocation_interface import AllocatorInterface, UnusableAllocator
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ from rsyscall.sched import Borrowable
 __all__ = [
     "FileDescriptor", "FDTable", "BaseFileDescriptor",
     "Pointer", "WrittenPointer", "ReadablePointer", "LinearPointer",
-    "Pid", "ChildPid", "ProcessPid",
+    "Pid", "ChildPid", "ProcessPid", "ChildPidError", "ChildDeadError", "ChildBusyError",
     "Task",
 ]
 
@@ -285,7 +285,8 @@ class Task(
         except OSError as exn:
             exn.filename = filename.value
             raise
-        self.manipulating_fd_table = False
+        finally:
+            self.manipulating_fd_table = False
         self._make_fresh_fd_table()
         self._make_fresh_address_space()
         if isinstance(self.pid, ChildPid):
@@ -294,8 +295,10 @@ class Task(
 
     async def exit(self, status: int) -> None:
         self.manipulating_fd_table = True
-        await _exit(self.sysif, status)
-        self.manipulating_fd_table = False
+        try:
+            await _exit(self.sysif, status)
+        finally:
+            self.manipulating_fd_table = False
         self._make_fresh_fd_table()
         # close the syscall interface; we don't have to do this since it'll be
         # GC'd, but maybe we want to be tidy in advance.

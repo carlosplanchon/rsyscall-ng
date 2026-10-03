@@ -12,11 +12,14 @@ world-accessible. The C and the Rust recordings are identical apart from the hea
 field. (First recorded on 2026-09-28 with the core modules only; the helper tests and then
 `test_net.py` joined on 2026-09-30, and the failures listed under "Fixed failures" were fixed;
 the two `TestActivityFdHangup` tests of `test_epoller.py` and the eight tests of the ssh
-temporary-file cleanup in `test_ssh.py` joined on 2026-10-01.)
+temporary-file cleanup in `test_ssh.py` joined on 2026-10-01; the eight tests of the fixes in
+`docs/spec/evolution-notes.md` ("Python-side defects noticed": `TestCloneCleanup` in
+`test_clone.py`, `test_child.py`, `test_environ.py` and `TestSSH::test_forwarder_reaped`) joined on
+2026-10-03, recorded on both backends with the same versions.)
 
 | Status | Count |
 |--------|-------|
-| PASS   | 112   |
+| PASS   | 120   |
 | SKIP   | 2     |
 | FAIL   | 0     |
 | ERROR  | 0     |
@@ -132,11 +135,11 @@ process group once it has exited; `make baseline` and `make wheel-test` go throu
   the C and the Rust helpers leave it alone), so the C oracle would die the same way; it passed
   only because its client happened to be at another phase of the epoll loop when it shut the
   connection down. `SyscallConnection.infallible_send` now requests the `sendto` with
-  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`), which servers execute verbatim.
-- Collection yields 114 tests on this machine: 73 from the core modules (71 `def test_`
+  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:186`), which servers execute verbatim.
+- Collection yields 122 tests on this machine: 80 from the core modules (78 `def test_`
   functions, plus two because `test_clone.py` defines two classes that inherit the same test
-  methods) and 41 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
-  `test_ssh.py` (17), `test_fuse.py` (2) and `test_net.py` (8).
+  methods) and 42 from `test_stub.py` (3), `test_stdinboot.py` (3), `test_persistent.py` (8),
+  `test_ssh.py` (18), `test_fuse.py` (2) and `test_net.py` (8).
 - Every ssh connection starts a janitor on each host that removes its temporary files once
   unused (`rsyscall/tasks/ssh.py`). The janitors run in sessions of their own, so they outlive
   the `killpg` of `scripts/pytest_session.py` on purpose. They hold no file descriptor but

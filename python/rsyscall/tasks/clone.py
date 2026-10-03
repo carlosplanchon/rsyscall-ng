@@ -10,7 +10,6 @@ from rsyscall._raw import ffi # type: ignore
 from rsyscall.epoller import AsyncFileDescriptor
 from rsyscall.handle import Stack, WrittenPointer, Pointer, FutexNode, FileDescriptor, Task, FutexNode
 from rsyscall.loader import Trampoline, NativeLoader
-from rsyscall.memory.allocator import Arena
 from rsyscall.monitor import AsyncChildPid, ChildPidMonitor
 from rsyscall.network.connection import Connection
 from rsyscall.struct import Int32
@@ -25,7 +24,6 @@ import typing as t
 
 from rsyscall.sched import CLONE
 from rsyscall.signal import SIG
-from rsyscall.sys.mman import PROT, MAP
 from rsyscall.sys.socket import SHUT
 from rsyscall.sys.wait import W
 
@@ -105,10 +103,6 @@ async def clone_child_task(
     [(access_sock, remote_sock)] = await connection.open_async_channels(1)
     # Create a trampoline that will start the new process running an rsyscall server
     trampoline = trampoline_func(remote_sock)
-    # TODO it is unclear why we sometimes need to make a new mapping here, instead of
-    # allocating with our normal allocator; all our memory is already MAP.SHARED, I think.
-    # We should resolve this so we can use the normal allocator.
-    arena = Arena(await task.mmap(4096*2, PROT.READ|PROT.WRITE, MAP.SHARED))
     # Create the stack we'll need, and the zero-initialized futex
     stack_value = loader.make_trampoline_stack(trampoline)
     stack_buf = await task.malloc(Stack, 4096)
@@ -134,6 +128,17 @@ async def clone_child_task(
             # connection is broken anyway, so shut it down.
             pass
         await access_sock.handle.shutdown(SHUT.RDWR)
+        # Nothing is sent or received on this connection again: pending and later requests
+        # fail with SyscallHangup or SyscallSendError (and exec takes the hangup as its
+        # success). Close our end too, which also takes it off the epoller; otherwise every
+        # clone would leak this socket for the rest of our life. But first let epoll deliver
+        # the hangup caused by the shutdown: that event is what wakes whoever is waiting on
+        # this connection, and once the fd is off the epollfd it would never come.
+        try:
+            await access_sock.wait_for_rdhup()
+            await access_sock.close()
+        except Exception:
+            logger.debug("couldn't close %s", access_sock, exc_info=True)
     # Running this in the background, without an associated object, is a bit dubious...
     reset(shutdown_access_sock_on_futex_process_exit())
     # Set up the new task with appropriately inherited namespaces, tables, etc.

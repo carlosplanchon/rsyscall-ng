@@ -36,7 +36,7 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
 - `newtls` is always 0 (`python/rsyscall/sched.py:149-150`), so the child has no TLS of its own.
   Passing `CLONE_SETTLS` with a per-child TLS block would allow trampoline-entered code to be
   ordinary compiled code (including `errno` and Rust's thread-local machinery).
-- The futex helper's stack is never freed (`python/rsyscall/tasks/clone.py:71`). Because the
+- The futex helper's stack is never freed (`python/rsyscall/tasks/clone.py:69`). Because the
   helper stops itself before touching the futex, the client could free it after the stop, or the
   helper could be replaced by something that needs no stack at all.
 
@@ -87,7 +87,7 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
   default `SIGPIPE` disposition, i.e. one bootstrapped by a helper executable rather than cloned
   from CPython (which ignores `SIGPIPE`); `test_persistent.py::test_ssh_same` showed it with the Rust
   helpers and would with the C ones under the same timing. The client now requests it with
-  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:180`, `wire-protocol.md` §7); servers execute
+  `MSG_NOSIGNAL` (`python/rsyscall/tasks/connection.py:186`, `wire-protocol.md` §7); servers execute
   the flags verbatim, so the wire format is unchanged.
 - `futex_memfd` is passed by the stub client and reported by two describe structs but never used
   (`python/rsyscall/tasks/stub.py:182-183`); dropping it (or defining what the memfd is for) would
@@ -143,6 +143,53 @@ here is a requirement; the requirements are in `wire-protocol.md`, `native-abi.m
   it as its working directory. `ssh_bootstrap.sh`, the commands quoted in
   `bootstrap-handshakes.md` §2 and the wire format are unchanged, and remote processes still start
   in the temporary directory.
+
+- Every clone left two things behind in the parent for the rest of its life: its end of the
+  child's syscall connection, which the futex monitor shut down but never closed, and an 8 KiB
+  `MAP_SHARED` mapping that nothing used, left over from the upstream refactor that moved the
+  stack and the futex to the task's allocator. That is one socket and one mapping per process ever
+  spawned (300 spawns: 300 more sockets, about 300 more mappings), so a long-lived parent runs out of file
+  descriptors. The mapping is gone, and the monitor now closes the socket as well, once epoll has
+  reported the hangup its shutdown causes (`python/rsyscall/tasks/clone.py:131-141`): taking the
+  fd off the epollfd before that event would lose it, and with it the wakeup of whoever waits on
+  the connection, exec included. `close_interface` leaves an already closed end alone
+  (`python/rsyscall/tasks/connection.py:112-123`). A closed connection is no longer referenced by
+  the epoller, so its loops are garbage-collected with the rest of the dead process; finalizers in
+  that same garbage, such as `Pointer.__del__` returning memory, could then resume a finished
+  loop (`RuntimeError: cannot reuse already awaited coroutine`, in `test_clone.py::test_nest_exec`),
+  so a request made once a loop has ended fails with `SyscallSendError` instead
+  (`python/rsyscall/tasks/connection.py:199-211`, `python/rsyscall/tasks/connection.py:213-217`,
+  `python/rsyscall/tasks/connection.py:254-258`). `test_clone.py::TestCloneCleanup` checks that
+  spawning leaves no fds and no mappings behind. The requests a server receives are unchanged.
+- A child that has not exec'd outlives its parent. The futex helper of every clone shares the
+  parent's fd table (`python/rsyscall/tasks/clone.py:61`), so when the parent dies the helper keeps
+  the parent's end of the child's connection open: the child never sees end of file and the helper
+  waits on a futex that is never woken. This is why interrupted tests leave pairs of such processes
+  behind. Not changed: closing the child's own copy of that end does not help while the helper
+  holds the table, and making clones die with their parent (`PR_SET_PDEATHSIG`, which
+  `make_persistent` already resets) would change what every exec'd child does too.
+- A child killed by a real-time signal made `waitid` handling raise `ValueError` from `SIG(status)`
+  after the zombie had been reaped, losing its state for good (`SIG` only names the standard
+  signals). `ChildState.sig` now holds the plain number for such a signal
+  (`python/rsyscall/sys/wait.py:64`, `python/rsyscall/sys/wait.py:112-122`;
+  `test_child.py::TestChild::test_killed_by_realtime_signal`).
+- A failed `execve` left `Task.manipulating_fd_table` set, so the process could no longer get new
+  fd handles, unlike `execveat` (`python/rsyscall/handle/__init__.py:288-289`); `exit` had the same
+  shape (`python/rsyscall/handle/__init__.py:300-301`). Both reset it in a `finally` now
+  (`test_child.py::TestChild::test_failed_exec_leaves_the_child_usable`).
+- `Environment` cached two things it did not keep current: the `envp` array, reused by every
+  later exec even after a variable changed, and the `PATH` lookups of `which`, which ignored a new
+  `PATH`. Assigning `data`, item assignment and deletion now drop both
+  (`python/rsyscall/environ.py:128-147`). `which` also searched `PATH` for names containing a
+  slash; like `execvp`, it now takes them as paths (`python/rsyscall/environ.py:181-186`;
+  `test_environ.py`).
+- Every `SSHHost.ssh` left a zombie behind: the forwarding `ssh -L` was never waited for once it
+  exited (`python/rsyscall/tasks/ssh.py:245-248`). It is reaped in the background now
+  (`python/rsyscall/tasks/ssh.py:562-574`; `test_ssh.py::TestSSH::test_forwarder_reaped`).
+- Misusing a `ChildPid` raised a plain `Exception`; waiting on or signalling a reaped child now
+  raises `ChildDeadError`, and a concurrent use `ChildBusyError`, both subclasses of
+  `ChildPidError` and of `Exception` (`python/rsyscall/handle/process.py:68-75`;
+  `test_child.py::TestChild::test_signalling_a_reaped_child`).
 
 ## Oracle gaps
 

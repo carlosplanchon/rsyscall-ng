@@ -54,14 +54,14 @@ class ChildState:
     pid: int
     uid: int
     exit_status: t.Optional[int]
-    sig: t.Optional[SIG]
+    sig: t.Optional[t.Union[SIG, int]]
 
     @staticmethod
     def make(code: CLD, pid: int, uid: int, status: int) -> ChildState:
         if code is CLD.EXITED:
             return ChildState(code, pid, uid, status, None)
         else:
-            return ChildState(code, pid, uid, None, SIG(status))
+            return ChildState(code, pid, uid, None, _signal(status))
 
     @staticmethod
     def make_from_siginfo(siginfo: Siginfo) -> ChildState:
@@ -97,7 +97,7 @@ class ChildState:
         else:
             raise CalledProcessError(self)
 
-    def killed_with(self) -> SIG:
+    def killed_with(self) -> t.Union[SIG, int]:
         """What signal was the child killed with?
 
         Throws if the child was not killed with a signal.
@@ -108,6 +108,18 @@ class ChildState:
         if self.sig is None:
             raise Exception("Child wasn't killed with a signal")
         return self.sig
+
+def _signal(number: int) -> t.Union[SIG, int]:
+    """The signal with this number: a `SIG` for the standard signals, else the plain number.
+
+    `SIG` only names the standard signals, but a child can also be killed by a real-time
+    signal; raising there would lose the state of a child that waitid has already reaped.
+
+    """
+    try:
+        return SIG(number)
+    except ValueError:
+        return number
 
 
 #### Raw syscalls ####
