@@ -97,13 +97,18 @@ From a checkout, `make docs` builds the reference into `site/` and
 
 ## Relation to upstream
 
-Upstream has been dormant since 2022-07-25 and its PyPI package no longer
-installs. rsyscall-ng keeps the upstream Python API (imported with its full git
-history under `python/`) and brings it to current Python (>= 3.12) and trio.
-The small native part (a syscall server, a `clone` trampoline, a futex helper
-and three bootstrap helpers, C + x86_64 assembly upstream) has been
-reimplemented in Rust under `native/`, clean-room from the specification in
-`docs/spec/`. The unmodified upstream C is still built locally, only as a
+Upstream has had no code changes since 2022-07-25 and its PyPI package no
+longer installs. On 2026-10-09 it added a LICENSE file that puts the whole
+repository under the MIT License
+([catern/rsyscall#11](https://github.com/catern/rsyscall/issues/11)).
+rsyscall-ng keeps the upstream Python API (imported with its full git history
+under `python/`) and brings it to current Python (>= 3.12) and trio. The small
+native part (a syscall server, a `clone` trampoline, a futex helper and three
+bootstrap helpers, C + x86_64 assembly upstream) has been reimplemented in Rust
+under `native/`. Up to release 0.1.5 that was a clean-room work, written from
+the specification in `docs/spec/` alone, because the license of the upstream C
+was not declared yet; now that it is, the project no longer follows that
+process. The unmodified upstream C is still built locally, only as a
 *differential test oracle* (`BACKEND=c`).
 
 ## Status
@@ -147,8 +152,8 @@ reimplemented in Rust under `native/`, clean-room from the specification in
 | `.github/workflows/ci.yml` | the CI workflow, described under "Continuous integration" |
 | `.github/workflows/docs.yml` | builds the API reference with `scripts/api-docs.py` and publishes it to GitHub Pages for every version tag |
 | `tests/baseline-c.txt`     | per-test status of the suite against the C backend          |
-| `docs/spec/`               | clean-room v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
-| `native/`                  | clean-room Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
+| `docs/spec/`               | v0 specification of the native side (wire protocol, native ABI, bootstrap handshakes, generated layouts and vectors) |
+| `native/`                  | Rust reimplementation of the native side (`core/` logic and tests, `rsyscall/` cdylib and helper executables); see `native/README.md` |
 | `native/prefix/` (gitignored) | the Rust native side installed by `make native` with the oracle's layout |
 | `tests/baseline-rust.txt`  | the same suite recorded against the Rust backend; identical to the C one |
 | `reference/` (gitignored)  | pinned upstream clone and the locally built C oracle        |
@@ -272,7 +277,9 @@ Actions are pinned to commit SHAs, with the release named in a comment.
 ## Licensing
 
 New code, including all of `native/`, is MIT, Copyright (c) 2026 Carlos Andrés
-Planchón Prestes (see `LICENSE`). `python/` is MIT per upstream package
-metadata, Copyright 2018-2022 Spencer Baugh and contributors. Upstream `c/` is
-intentionally not part of this repository; `native/` was written from
-`docs/spec/` alone, without access to it. See `NOTICE` for details.
+Planchón Prestes (see `LICENSE`). `python/` comes from upstream rsyscall, which
+is MIT (Copyright 2018-2022 Spencer Baugh and contributors); `NOTICE`
+reproduces upstream's LICENSE file. Upstream `c/`, under the same LICENSE, is
+not part of this repository because `native/` replaces it; up to release 0.1.5,
+`native/` was written from `docs/spec/` alone, without access to `c/`. See
+`NOTICE` for details.

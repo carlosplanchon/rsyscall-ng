@@ -13,44 +13,54 @@ rsyscall-ng -- provenance and licensing notice
 
    Copyright (c) 2018-2022 Spencer Baugh and contributors.
 
-   License: MIT, as declared by the upstream package metadata:
-     - python/setup.py: license='MIT' and the classifier
+   License: MIT. On 2026-10-09 upstream added a LICENSE file with the MIT
+   License at the root of its repository, closing
+   https://github.com/catern/rsyscall/issues/11. It did so in commit
+   d1073e5bf0cf5bd29aab65082ea9bbe699ca9470, whose only change over
+   2a362099610a664caeb7f06dd805e5a0fb80cd08 is that file. The upstream package
+   metadata had already declared MIT:
+     - upstream's python/setup.py: license='MIT' and the classifier
        "License :: OSI Approved :: MIT License";
      - the PKG-INFO of the rsyscall 0.0.3 source distribution published on
        PyPI (https://pypi.org/project/rsyscall/0.0.3/), which declares
        "License: MIT".
-   Upstream ships no LICENSE file; a request to add one is open at
-   https://github.com/catern/rsyscall/issues/11. The MIT License text that
-   applies to the upstream Python code is reproduced below.
+   Upstream's LICENSE file is reproduced verbatim below.
 
-3. Deliberately NOT included in this repository: upstream c/ (librsyscall,
-   its assembly routines and the helper programs rsyscall-server,
-   rsyscall-bootstrap, rsyscall-stdin-bootstrap and rsyscall-unix-stub),
-   nixdeps/, docs/, research/ and the Nix build files at the upstream root.
-   The licensing of c/ is not declared anywhere upstream. This repository
-   only builds it locally, unmodified, from a clone placed under the
-   gitignored directory reference/ (see Makefile and scripts/), as a test
-   oracle for the differential test-suite. It is never redistributed here.
+3. Not included in this repository: upstream c/ (librsyscall, its assembly
+   routines and the helper programs rsyscall-server, rsyscall-bootstrap,
+   rsyscall-stdin-bootstrap and rsyscall-unix-stub), which native/ replaces,
+   and nixdeps/, docs/, research/ and the Nix build files at the upstream root.
+   Upstream's root LICENSE (item 2) covers c/ as well. This repository only
+   builds c/ locally, unmodified, from a clone placed under the gitignored
+   directory reference/ (see Makefile and scripts/), as a test oracle for the
+   differential test-suite. It is not redistributed here.
 
 4. "rsyscall" is the name of the upstream project. This repository is an
    independent modernization effort and is not endorsed by upstream.
 
 5. native/ is new code under the MIT License (item 1). It reimplements the
-   native side of rsyscall from scratch as a clean-room work: it was written on
-   2026-09-29 from the specification in docs/spec/ alone, by an agent whose
-   read access excluded reference/, every C and assembly source and the Python
-   internals; the specification itself had been derived exclusively from the
-   MIT-licensed python/ tree (docs/spec/README.md §4). The reviewer, who had
-   read the upstream C earlier for an unrelated analysis, authored none of the
+   native side of rsyscall from scratch. The code in native/ up to release
+   0.1.5 is a clean-room work, done that way only because the license of
+   upstream c/ was undeclared at the time: it was written on 2026-09-29 from
+   the specification in docs/spec/ alone, by an agent whose read access
+   excluded reference/, every C and assembly source and the Python internals;
+   the specification itself had been derived exclusively from the MIT-licensed
+   python/ tree (docs/spec/README.md §4). The reviewer, who had read the
+   upstream C earlier for an unrelated analysis, authored none of the
    specification or of native/ and reviewed both against docs/spec/ only. The
    upstream binaries built under reference/ served solely as a black-box test
    oracle (recorded test outcomes and observed behaviour). See
-   native/README.md.
+   native/README.md. Since upstream's LICENSE (item 2) covers c/, the project
+   no longer follows this clean-room process: later changes to native/ and
+   docs/spec/ may draw on upstream c/.
 
 ----------------------------------------------------------------------
-MIT License (upstream python/ code)
+Upstream LICENSE file, reproduced verbatim from
+https://github.com/catern/rsyscall/blob/d1073e5bf0cf5bd29aab65082ea9bbe699ca9470/LICENSE
 
-Copyright (c) 2018-2022 Spencer Baugh and contributors
+MIT License
+
+Copyright (c) 2026 Spencer Baugh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
